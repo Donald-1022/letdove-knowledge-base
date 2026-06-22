@@ -9,7 +9,7 @@ const env = {
       puts.push({
         key,
         contentType: options?.httpMetadata?.contentType,
-        size: body.byteLength
+        hasBody: Boolean(body)
       });
     }
   }
@@ -50,7 +50,7 @@ const single = await postUpload({
 
 assert.equal(single.status, 200);
 assert.equal(single.payload.success, true);
-assert.match(single.payload.key, /^letdove\/prompt\/p01_q01\/image_\d+\.png$/);
+assert.match(single.payload.key, /^letdove\/prompt\/p01_q01\/image_\d+_[a-f0-9-]+\.png$/);
 assert.equal(single.payload.url, `https://img.letdove.uk/${single.payload.key}`);
 
 const getResponse = await onRequestGet();
@@ -71,7 +71,7 @@ const multi = await postUpload({
 
 assert.equal(multi.status, 200);
 assert.equal(multi.payload.success, true);
-assert.match(multi.payload.key, /^letdove\/design_system\/s01_g02\/image_\d+\.png$/);
+assert.match(multi.payload.key, /^letdove\/design_system\/s01_g02\/image_\d+_[a-f0-9-]+\.png$/);
 assert.equal(multi.payload.url, `https://img.letdove.uk/${multi.payload.key}`);
 assert.equal(puts.length, 2);
 assert.deepEqual(
@@ -79,4 +79,20 @@ assert.deepEqual(
   ["image/jpeg", "image/png"]
 );
 
-console.log("Cloudflare Pages upload function verified: R2 put called and public URL returned.");
+for (let index = 0; index < 20; index += 1) {
+  const response = await postUpload({
+    category: "stress",
+    files: [{ name: `image-${index}.png`, type: "image/png" }],
+    letdoveCode: "P01_Q01",
+    startIndex: index + 1
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.payload.success, true);
+  assert.ok(response.payload.url.startsWith("https://img.letdove.uk/"));
+}
+
+assert.equal(puts.length, 22);
+assert.equal(new Set(puts.map((put) => put.key)).size, puts.length);
+
+console.log("Cloudflare Pages upload function verified: 20 consecutive uploads returned public R2 URLs.");

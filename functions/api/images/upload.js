@@ -23,12 +23,12 @@ export async function onRequestPost({ request, env }) {
 
     const category = sanitizePathSegment(formData.get("category") || "general");
     const letdoveCode = sanitizePathSegment(formData.get("letdove_code") || "uncategorized");
-    const fileBuffer = await file.arrayBuffer();
-    const key = `letdove/${category}/${letdoveCode}/image_${Date.now()}.png`;
+    const uniqueId = `${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    const key = `letdove/${category}/${letdoveCode}/image_${uniqueId}.png`;
 
     console.log("R2 KEY:", key);
 
-    await env.LETDOVE_IMAGES.put(key, fileBuffer, {
+    await env.LETDOVE_IMAGES.put(key, file.stream(), {
       httpMetadata: {
         contentType: file.type
       }

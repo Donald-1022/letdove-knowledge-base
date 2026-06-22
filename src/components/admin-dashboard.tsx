@@ -207,6 +207,10 @@ export function AdminDashboard() {
       return;
     }
 
+    if (uploadState === "uploading") {
+      return;
+    }
+
     const beforeItems = items;
     setUploadState("uploading");
     setNotice("Uploading images to R2...");
@@ -245,27 +249,40 @@ export function AdminDashboard() {
   }
 
   async function uploadFiles(files: FileList, item: AdminItem) {
-    const formData = new FormData();
-    Array.from(files).forEach((file) => formData.append("file", file));
-    formData.set("category", item.category_l1 || "general");
-    formData.set("letdove_code", item.letdove_code || "uncategorized");
-    formData.set("start_index", String(item.media.gallery.length + 1));
+    const selectedFiles = Array.from(files).filter((file): file is File => file instanceof File);
 
-    const response = await fetch("/api/images/upload", {
-      body: formData,
-      method: "POST"
-    });
-
-    const payload = (await response.json()) as UploadResponse;
-
-    if (!response.ok || !payload.success) {
-      throw new Error(!payload.success ? payload.error : "R2 upload failed.");
+    if (!selectedFiles.length) {
+      throw new Error("No file selected");
     }
 
-    const uploaded = "images" in payload ? payload.images : [payload];
-    return uploaded
-      .map((image) => image.url)
-      .filter((url): url is string => typeof url === "string" && url.startsWith("https://img.letdove.uk/"));
+    const urls: string[] = [];
+
+    for (const [index, file] of selectedFiles.entries()) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("category", item.category_l1 || "");
+      formData.append("letdove_code", item.letdove_code || "");
+      formData.append("start_index", String((item.media.gallery.length || 0) + index + 1));
+
+      const response = await fetch("/api/images/upload", {
+        body: formData,
+        method: "POST"
+      });
+
+      const payload = (await response.json()) as UploadResponse;
+
+      if (!response.ok || !payload.success) {
+        throw new Error(!payload.success ? payload.error : "R2 upload failed.");
+      }
+
+      if (!("url" in payload) || typeof payload.url !== "string") {
+        throw new Error("Upload failed: missing URL");
+      }
+
+      urls.push(payload.url);
+    }
+
+    return urls.filter((url): url is string => typeof url === "string" && url.startsWith("https://img.letdove.uk/"));
   }
 
   function reorderImage(targetIndex: number) {
@@ -399,7 +416,18 @@ export function AdminDashboard() {
               <section className="admin-v2-image-panel">
                 <div className="admin-v2-panel-head">
                   <strong>Images</strong>
-                  <label data-state={uploadState}><Upload size={15} />{uploadState === "uploading" ? "Uploading" : "Batch upload"}<input accept="image/*" disabled={uploadState === "uploading"} hidden multiple onChange={(event) => uploadImages(event.target.files)} type="file" /></label>
+                  <label data-state={uploadState}><Upload size={15} />{uploadState === "uploading" ? "Uploading" : "Batch upload"}<input accept="image/*" disabled={uploadState === "uploading"} hidden multiple onChange={(event) => {
+                    const file = event.target.files?.[0];
+
+                    if (!file) {
+                      setUploadState("error");
+                      setNotice("No file selected");
+                      return;
+                    }
+
+                    uploadImages(event.target.files);
+                    event.target.value = "";
+                  }} type="file" /></label>
                 </div>
                 <div className="admin-v2-image-grid">
                   {selectedItem.media.gallery.map((image, index) => (

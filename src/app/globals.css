@@ -1707,6 +1707,18 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .admin-v2-center {
+    order: 2;
+  }
+
+  .admin-v2-right {
+    order: 3;
+  }
+
+  .admin-v2-left {
+    order: 1;
+  }
+
   .topbar {
     align-items: start;
     grid-template-columns: 1fr;
@@ -1764,8 +1776,12 @@ a {
 }
 
 @media (max-width: 520px) {
+  body {
+    overflow-x: hidden;
+  }
+
   .app-shell {
-    padding-top: 20px;
+    padding: 16px 10px 40px;
   }
 
   .metric-strip {
@@ -1785,8 +1801,26 @@ a {
     padding: 12px;
   }
 
+  .lexicon-grid {
+    gap: 10px;
+  }
+
+  .lexicon-card {
+    border-radius: 8px;
+  }
+
   .card-title {
     font-size: 16px;
+  }
+
+  .card-tags {
+    gap: 4px;
+  }
+
+  .tag-chip {
+    font-size: 10px;
+    max-width: 100%;
+    padding: 4px 6px;
   }
 
   .card-taxonomy {
@@ -1795,5 +1829,147 @@ a {
 
   .modal-backdrop {
     padding: 8px;
+  }
+
+  .post-modal {
+    border-radius: 8px;
+    max-height: calc(100dvh - 16px);
+  }
+
+  .post-panel {
+    min-height: min(420px, 76dvh);
+  }
+
+  .post-body {
+    padding: 14px;
+  }
+
+  .detail-page {
+    padding: 12px 10px 40px;
+  }
+
+  .detail-hero-page {
+    gap: 12px;
+  }
+
+  .detail-title-row {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .detail-title-row h1 {
+    font-size: 26px;
+  }
+
+  .detail-blocks {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-v2-shell {
+    padding: 10px;
+  }
+
+  .admin-v2-login-shell {
+    padding: 14px;
+  }
+
+  .admin-v2-login-card {
+    gap: 12px;
+    padding: 20px;
+  }
+
+  .admin-v2-login-card h1 {
+    font-size: 22px;
+  }
+
+  .admin-v2-topbar {
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .admin-v2-topbar h1 {
+    font-size: 24px;
+  }
+
+  .admin-v2-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .admin-v2-actions button,
+  .admin-v2-actions label {
+    min-height: 42px;
+    width: 100%;
+  }
+
+  .admin-v2-grid {
+    gap: 10px;
+  }
+
+  .admin-v2-left,
+  .admin-v2-center,
+  .admin-v2-right {
+    border-radius: 8px;
+    padding: 10px;
+  }
+
+  .admin-v2-list {
+    max-height: 48dvh;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .admin-v2-list-item {
+    grid-template-columns: 48px minmax(0, 1fr);
+    padding: 7px;
+  }
+
+  .admin-v2-list-item img,
+  .admin-v2-list-item > span {
+    width: 48px;
+  }
+
+  .admin-v2-editor-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-v2-editor-head button {
+    width: 100%;
+  }
+
+  .admin-v2-panel-head {
+    align-items: start;
+  }
+
+  .admin-v2-field input,
+  .admin-v2-field select,
+  .admin-v2-field textarea,
+  .admin-v2-search {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .admin-v2-image-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-v2-image {
+    padding: 6px;
+  }
+
+  .admin-v2-image div {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-v2-image button {
+    min-height: 36px;
+    width: 100%;
+  }
+
+  .admin-v2-preview-card {
+    max-width: 420px;
+    width: 100%;
   }
 }
