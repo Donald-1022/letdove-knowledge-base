@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  Copy,
   Download,
   Eye,
   FileJson,
   LogOut,
+  ExternalLink,
   Plus,
   Save,
   Send,
@@ -54,6 +56,7 @@ export function AdminDashboard() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [notice, setNotice] = useState("");
+  const [failedImages, setFailedImages] = useState<string[]>([]);
 
   useEffect(() => {
     setAuthenticated(window.localStorage.getItem(authKey) === "true");
@@ -238,7 +241,7 @@ export function AdminDashboard() {
         });
       });
 
-      persist(nextItems, "Images uploaded to R2 and saved into media.gallery.");
+      persist(nextItems, `${urls.length} image${urls.length > 1 ? "s" : ""} uploaded. Latest: ${urls[urls.length - 1]}`);
       setUploadState("success");
     } catch (error) {
       setItems(beforeItems);
@@ -269,7 +272,7 @@ export function AdminDashboard() {
         method: "POST"
       });
 
-      const payload = (await response.json()) as UploadResponse;
+      const payload = await readUploadResponse(response);
 
       if (!response.ok || !payload.success) {
         throw new Error(!payload.success ? payload.error : "R2 upload failed.");
@@ -283,6 +286,20 @@ export function AdminDashboard() {
     }
 
     return urls.filter((url): url is string => typeof url === "string" && url.startsWith("https://img.letdove.uk/"));
+  }
+
+  async function readUploadResponse(response: Response) {
+    const text = await response.text();
+
+    try {
+      return JSON.parse(text) as UploadResponse;
+    } catch {
+      throw new Error(
+        text.startsWith("Server")
+          ? "Upload endpoint returned a Server Action response. Use Cloudflare Pages preview/deploy, not next dev, for R2 uploads."
+          : `Upload endpoint did not return JSON: ${text.slice(0, 120)}`
+      );
+    }
   }
 
   function reorderImage(targetIndex: number) {
@@ -325,6 +342,14 @@ export function AdminDashboard() {
         gallery: selectedItem?.media.gallery ?? []
       }
     });
+  }
+
+  async function copyText(text: string) {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+    }
+
+    setNotice("Image URL copied.");
   }
 
   if (!authenticated) {
@@ -415,7 +440,10 @@ export function AdminDashboard() {
 
               <section className="admin-v2-image-panel">
                 <div className="admin-v2-panel-head">
-                  <strong>Images</strong>
+                  <div>
+                    <strong>Uploaded images</strong>
+                    <span>{selectedItem.media.gallery.length} image{selectedItem.media.gallery.length === 1 ? "" : "s"}</span>
+                  </div>
                   <label data-state={uploadState}><Upload size={15} />{uploadState === "uploading" ? "Uploading" : "Batch upload"}<input accept="image/*" disabled={uploadState === "uploading"} hidden multiple onChange={(event) => {
                     const file = event.target.files?.[0];
 
@@ -429,8 +457,11 @@ export function AdminDashboard() {
                     event.target.value = "";
                   }} type="file" /></label>
                 </div>
-                <div className="admin-v2-image-grid">
-                  {selectedItem.media.gallery.map((image, index) => (
+                {selectedItem.media.gallery.length ? <div className="admin-v2-image-grid">
+                  {selectedItem.media.gallery.map((image, index) => {
+                    const imageFailed = failedImages.includes(image);
+
+                    return (
                     <div
                       className="admin-v2-image"
                       draggable
@@ -439,14 +470,21 @@ export function AdminDashboard() {
                       onDragStart={() => setDragIndex(index)}
                       onDrop={() => reorderImage(index)}
                     >
-                      <img alt="" src={image} />
+                      {imageFailed ? (
+                        <div className="admin-v2-image-fallback">Image URL saved, but preview failed to load.</div>
+                      ) : (
+                        <img alt="" onError={() => setFailedImages((current) => current.includes(image) ? current : [...current, image])} src={image} />
+                      )}
+                      <code title={image}>{image}</code>
                       <div>
                         <button data-active={selectedItem.media.cover === image} onClick={() => setCover(image)} type="button"><Eye size={14} />Cover</button>
+                        <button onClick={() => copyText(image)} type="button"><Copy size={14} /></button>
+                        <a href={image} rel="noreferrer" target="_blank"><ExternalLink size={14} /></a>
                         <button onClick={() => deleteImage(index)} type="button"><Trash2 size={14} /></button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )})}
+                </div> : <div className="admin-v2-empty">No uploaded images yet.</div>}
                 {notice && <p className="admin-v2-notice" data-state={uploadState}>{notice}</p>}
               </section>
             </>

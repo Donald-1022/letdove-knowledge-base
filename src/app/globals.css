@@ -1601,10 +1601,53 @@ a {
   width: 100%;
 }
 
+.admin-v2-image-fallback {
+  align-items: center;
+  aspect-ratio: 4 / 5;
+  background: var(--background);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  justify-content: center;
+  line-height: 1.4;
+  padding: 10px;
+  text-align: center;
+}
+
+.admin-v2-image code {
+  background: var(--background);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 5px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-v2-image div {
   display: grid;
   gap: 6px;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr repeat(3, auto);
+}
+
+.admin-v2-image a {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--foreground);
+  display: inline-flex;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px 10px;
 }
 
 .admin-v2-preview-card {

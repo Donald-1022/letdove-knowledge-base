@@ -12,7 +12,13 @@ export async function onRequestPost({ request, env }) {
     const file = formData.get("file");
     console.log("file:", file);
 
-    if (!file || !(file instanceof File)) {
+    if (!isUploadFile(file)) {
+      console.error("Invalid file input", {
+        fileType: typeof file,
+        constructorName: file?.constructor?.name,
+        hasStream: Boolean(file?.stream),
+        hasArrayBuffer: Boolean(file?.arrayBuffer)
+      });
       return json({ success: false, error: "Invalid file input" }, 400);
     }
 
@@ -56,6 +62,16 @@ function sanitizePathSegment(value) {
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+function isUploadFile(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      typeof value.stream === "function" &&
+      typeof value.arrayBuffer === "function" &&
+      typeof value.type === "string"
+  );
 }
 
 function json(payload, status = 200) {
