@@ -1,0 +1,10 @@
+.next/
+.open-next/
+.wrangler/
+.npm-cache/
+out/
+node_modules/
+.env*
+!.env.example
+*.tsbuildinfo
+dist/

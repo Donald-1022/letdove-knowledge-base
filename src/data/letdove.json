@@ -1,0 +1,396 @@
+[
+  {
+    "id": "ld_001",
+    "letdove_code": "P01_Q01",
+    "title": "Product Hero Prompt",
+    "description": "A compact prompt pattern for crisp product hero imagery with a clear subject, material cues, and lighting intent.",
+    "category_l1": "prompt",
+    "category_l2": "product",
+    "series": "P01 Product Visuals",
+    "tags": [
+      "AI",
+      "Prompt",
+      "Product",
+      "Lighting",
+      "Composition"
+    ],
+    "cards": [
+      {
+        "label": "Intent",
+        "body": "Create a single-object product scene that reads instantly in a square feed."
+      },
+      {
+        "label": "Prompt Shape",
+        "body": "Subject, material, surface, lighting, lens, color restraint, negative space."
+      },
+      {
+        "label": "Use Case",
+        "body": "Landing page hero images, launch posts, and visual exploration boards."
+      }
+    ],
+    "links": [
+      {
+        "label": "Reference",
+        "url": "https://vibeshot.club/lexicon?cat=product"
+      }
+    ],
+    "created_at": "2026-06-22",
+    "media": {
+      "cover": "https://img.letdove.uk/letdove/p01_q01/image_001.jpg",
+      "gallery": [
+        "https://img.letdove.uk/letdove/p01_q01/image_001.jpg",
+        "https://img.letdove.uk/letdove/p01_q01/image_002.jpg",
+        "https://img.letdove.uk/letdove/p01_q01/image_003.jpg"
+      ]
+    },
+    "search_index": "Product Hero Prompt A compact prompt pattern for crisp product hero imagery with a clear subject, material cues, and lighting intent. P01_Q01 prompt product P01 Product Visuals AI Prompt Product Lighting Composition Intent Create a single-object product scene that reads instantly in a square feed. Prompt Shape Subject, material, surface, lighting, lens, color restraint, negative space. Use Case Landing page hero images, launch posts, and visual exploration boards.",
+    "order": 1,
+    "pinned": false,
+    "visible": true,
+    "status": "published",
+    "sop": "",
+    "internal_links": [],
+    "version": 1,
+    "updated_at": "2026-06-22",
+    "display_order": 1
+  },
+  {
+    "id": "ld_002",
+    "letdove_code": "P01_Q02",
+    "title": "Material Surface Cue",
+    "description": "A visual recipe for making generated products feel tactile through surface texture and edge detail.",
+    "category_l1": "prompt",
+    "category_l2": "product",
+    "series": "P01 Product Visuals",
+    "tags": [
+      "Texture",
+      "Product",
+      "Macro",
+      "Material"
+    ],
+    "cards": [
+      {
+        "label": "Focus",
+        "body": "Use one dominant material and one secondary surface to avoid visual noise."
+      },
+      {
+        "label": "Detail",
+        "body": "Name the edge finish, reflection type, and surface imperfections explicitly."
+      },
+      {
+        "label": "Constraint",
+        "body": "Keep the environment simple so the material language carries the image."
+      }
+    ],
+    "links": [],
+    "created_at": "2026-06-22",
+    "media": {
+      "cover": "https://img.letdove.uk/letdove/p01_q02/image_001.jpg",
+      "gallery": [
+        "https://img.letdove.uk/letdove/p01_q02/image_001.jpg",
+        "https://img.letdove.uk/letdove/p01_q02/image_002.jpg",
+        "https://img.letdove.uk/letdove/p01_q02/image_003.jpg"
+      ]
+    },
+    "search_index": "Material Surface Cue A visual recipe for making generated products feel tactile through surface texture and edge detail. P01_Q02 prompt product P01 Product Visuals Texture Product Macro Material Focus Use one dominant material and one secondary surface to avoid visual noise. Detail Name the edge finish, reflection type, and surface imperfections explicitly. Constraint Keep the environment simple so the material language carries the image.",
+    "order": 2,
+    "pinned": false,
+    "visible": true,
+    "status": "published",
+    "sop": "",
+    "internal_links": [],
+    "version": 1,
+    "updated_at": "2026-06-22",
+    "display_order": 2
+  },
+  {
+    "id": "ld_003",
+    "letdove_code": "S01_G01",
+    "title": "Shot Grammar: Overhead Flatlay",
+    "description": "A structured card for arranging objects in a top-down composition with readable spacing.",
+    "category_l1": "design",
+    "category_l2": "composition",
+    "series": "S01 Shot Grammar",
+    "tags": [
+      "Flatlay",
+      "Grid",
+      "Composition",
+      "Visual Grammar"
+    ],
+    "cards": [
+      {
+        "label": "Frame",
+        "body": "Shoot directly downward with clear margins and a primary object cluster."
+      },
+      {
+        "label": "Rhythm",
+        "body": "Repeat small shapes, then interrupt the pattern with one anchor object."
+      },
+      {
+        "label": "Best For",
+        "body": "Toolkits, ingredient sets, process diagrams, and visual inventories."
+      }
+    ],
+    "links": [],
+    "created_at": "2026-06-22",
+    "media": {
+      "cover": "https://img.letdove.uk/letdove/s01_g01/image_001.jpg",
+      "gallery": [
+        "https://img.letdove.uk/letdove/s01_g01/image_001.jpg",
+        "https://img.letdove.uk/letdove/s01_g01/image_002.jpg",
+        "https://img.letdove.uk/letdove/s01_g01/image_003.jpg"
+      ]
+    },
+    "search_index": "Shot Grammar: Overhead Flatlay A structured card for arranging objects in a top-down composition with readable spacing. S01_G01 design composition S01 Shot Grammar Flatlay Grid Composition Visual Grammar Frame Shoot directly downward with clear margins and a primary object cluster. Rhythm Repeat small shapes, then interrupt the pattern with one anchor object. Best For Toolkits, ingredient sets, process diagrams, and visual inventories.",
+    "order": 3,
+    "pinned": false,
+    "visible": true,
+    "status": "published",
+    "sop": "",
+    "internal_links": [],
+    "version": 1,
+    "updated_at": "2026-06-22",
+    "display_order": 3
+  },
+  {
+    "id": "ld_004",
+    "letdove_code": "S01_G02",
+    "title": "Shot Grammar: Editorial Close-Up",
+    "description": "A square-format card pattern for intimate product and lifestyle details.",
+    "category_l1": "design",
+    "category_l2": "composition",
+    "series": "S01 Shot Grammar",
+    "tags": [
+      "Close Up",
+      "Editorial",
+      "Lens",
+      "Mood"
+    ],
+    "cards": [
+      {
+        "label": "Distance",
+        "body": "Move close enough that texture becomes information, not decoration."
+      },
+      {
+        "label": "Depth",
+        "body": "Use a soft background plane and a sharp foreground edge."
+      },
+      {
+        "label": "Feeling",
+        "body": "The result should feel observed, not staged."
+      }
+    ],
+    "links": [],
+    "created_at": "2026-06-22",
+    "media": {
+      "cover": "https://img.letdove.uk/letdove/s01_g02/image_001.jpg",
+      "gallery": [
+        "https://img.letdove.uk/letdove/s01_g02/image_001.jpg",
+        "https://img.letdove.uk/letdove/s01_g02/image_002.jpg",
+        "https://img.letdove.uk/letdove/s01_g02/image_003.jpg"
+      ]
+    },
+    "search_index": "Shot Grammar: Editorial Close-Up A square-format card pattern for intimate product and lifestyle details. S01_G02 design composition S01 Shot Grammar Close Up Editorial Lens Mood Distance Move close enough that texture becomes information, not decoration. Depth Use a soft background plane and a sharp foreground edge. Feeling The result should feel observed, not staged.",
+    "order": 4,
+    "pinned": false,
+    "visible": true,
+    "status": "published",
+    "sop": "",
+    "internal_links": [],
+    "version": 1,
+    "updated_at": "2026-06-22",
+    "display_order": 4
+  },
+  {
+    "id": "ld_005",
+    "letdove_code": "V02_C01",
+    "title": "Color System: Quiet Contrast",
+    "description": "A palette card for building calm pages that still separate foreground, metadata, and action.",
+    "category_l1": "design",
+    "category_l2": "color",
+    "series": "V02 Visual Systems",
+    "tags": [
+      "Color",
+      "UI",
+      "Contrast",
+      "System"
+    ],
+    "cards": [
+      {
+        "label": "Base",
+        "body": "Warm white surface, ink text, one muted accent, and thin neutral borders."
+      },
+      {
+        "label": "Signal",
+        "body": "Reserve saturated color for active filters, codes, and interactive states."
+      },
+      {
+        "label": "Rule",
+        "body": "Metadata should be legible but quieter than titles."
+      }
+    ],
+    "links": [],
+    "created_at": "2026-06-22",
+    "media": {
+      "cover": "https://img.letdove.uk/letdove/v02_c01/image_001.jpg",
+      "gallery": [
+        "https://img.letdove.uk/letdove/v02_c01/image_001.jpg",
+        "https://img.letdove.uk/letdove/v02_c01/image_002.jpg"
+      ]
+    },
+    "search_index": "Color System: Quiet Contrast A palette card for building calm pages that still separate foreground, metadata, and action. V02_C01 design color V02 Visual Systems Color UI Contrast System Base Warm white surface, ink text, one muted accent, and thin neutral borders. Signal Reserve saturated color for active filters, codes, and interactive states. Rule Metadata should be legible but quieter than titles.",
+    "order": 5,
+    "pinned": false,
+    "visible": true,
+    "status": "published",
+    "sop": "",
+    "internal_links": [],
+    "version": 1,
+    "updated_at": "2026-06-22",
+    "display_order": 5
+  },
+  {
+    "id": "ld_006",
+    "letdove_code": "V02_C02",
+    "title": "Tag Language Map",
+    "description": "A metadata card that keeps tags useful for search without turning them into navigation clutter.",
+    "category_l1": "system",
+    "category_l2": "metadata",
+    "series": "V02 Visual Systems",
+    "tags": [
+      "Tags",
+      "Search",
+      "Metadata",
+      "Taxonomy"
+    ],
+    "cards": [
+      {
+        "label": "Purpose",
+        "body": "Tags describe retrieval language: medium, mood, method, and object type."
+      },
+      {
+        "label": "Boundary",
+        "body": "Categories and series drive filtering; tags improve discovery through search."
+      },
+      {
+        "label": "Maintenance",
+        "body": "Prefer fewer stable tags over many near-duplicates."
+      }
+    ],
+    "links": [],
+    "created_at": "2026-06-22",
+    "media": {
+      "cover": "https://img.letdove.uk/letdove/v02_c02/image_001.jpg",
+      "gallery": [
+        "https://img.letdove.uk/letdove/v02_c02/image_001.jpg",
+        "https://img.letdove.uk/letdove/v02_c02/image_002.jpg"
+      ]
+    },
+    "search_index": "Tag Language Map A metadata card that keeps tags useful for search without turning them into navigation clutter. V02_C02 system metadata V02 Visual Systems Tags Search Metadata Taxonomy Purpose Tags describe retrieval language: medium, mood, method, and object type. Boundary Categories and series drive filtering; tags improve discovery through search. Maintenance Prefer fewer stable tags over many near-duplicates.",
+    "order": 6,
+    "pinned": false,
+    "visible": true,
+    "status": "published",
+    "sop": "",
+    "internal_links": [],
+    "version": 1,
+    "updated_at": "2026-06-22",
+    "display_order": 6
+  },
+  {
+    "id": "ld_007",
+    "letdove_code": "L03_R01",
+    "title": "Lexicon Card Anatomy",
+    "description": "A structural model for cards that can scale from prompt examples to visual knowledge entries.",
+    "category_l1": "system",
+    "category_l2": "schema",
+    "series": "L03 Lexicon Rules",
+    "tags": [
+      "Schema",
+      "Cards",
+      "Library",
+      "Content"
+    ],
+    "cards": [
+      {
+        "label": "Required",
+        "body": "Code, title, image, description, category hierarchy, series, and search tags."
+      },
+      {
+        "label": "Optional",
+        "body": "Links, prompt fragments, references, and related operational notes."
+      },
+      {
+        "label": "Principle",
+        "body": "Make each card atomic enough to be reused across collections."
+      }
+    ],
+    "links": [],
+    "created_at": "2026-06-22",
+    "media": {
+      "cover": "https://img.letdove.uk/letdove/l03_r01/image_001.jpg",
+      "gallery": [
+        "https://img.letdove.uk/letdove/l03_r01/image_001.jpg",
+        "https://img.letdove.uk/letdove/l03_r01/image_002.jpg"
+      ]
+    },
+    "search_index": "Lexicon Card Anatomy A structural model for cards that can scale from prompt examples to visual knowledge entries. L03_R01 system schema L03 Lexicon Rules Schema Cards Library Content Required Code, title, image, description, category hierarchy, series, and search tags. Optional Links, prompt fragments, references, and related operational notes. Principle Make each card atomic enough to be reused across collections.",
+    "order": 7,
+    "pinned": false,
+    "visible": true,
+    "status": "published",
+    "sop": "",
+    "internal_links": [],
+    "version": 1,
+    "updated_at": "2026-06-22",
+    "display_order": 7
+  },
+  {
+    "id": "ld_008",
+    "letdove_code": "L03_R02",
+    "title": "Series Naming Rule",
+    "description": "A naming convention for grouping cards into memorable learning sequences.",
+    "category_l1": "system",
+    "category_l2": "schema",
+    "series": "L03 Lexicon Rules",
+    "tags": [
+      "Series",
+      "Naming",
+      "Taxonomy",
+      "Rules"
+    ],
+    "cards": [
+      {
+        "label": "Pattern",
+        "body": "Use a short prefix, numeric order, and plain-language series name."
+      },
+      {
+        "label": "Example",
+        "body": "P01 Product Visuals, S01 Shot Grammar, L03 Lexicon Rules."
+      },
+      {
+        "label": "Benefit",
+        "body": "Readers can scan the library as a system instead of a pile of posts."
+      }
+    ],
+    "links": [],
+    "created_at": "2026-06-22",
+    "media": {
+      "cover": "https://img.letdove.uk/letdove/l03_r02/image_001.jpg",
+      "gallery": [
+        "https://img.letdove.uk/letdove/l03_r02/image_001.jpg",
+        "https://img.letdove.uk/letdove/l03_r02/image_002.jpg"
+      ]
+    },
+    "search_index": "Series Naming Rule A naming convention for grouping cards into memorable learning sequences. L03_R02 system schema L03 Lexicon Rules Series Naming Taxonomy Rules Pattern Use a short prefix, numeric order, and plain-language series name. Example P01 Product Visuals, S01 Shot Grammar, L03 Lexicon Rules. Benefit Readers can scan the library as a system instead of a pile of posts.",
+    "order": 8,
+    "pinned": false,
+    "visible": true,
+    "status": "published",
+    "sop": "",
+    "internal_links": [],
+    "version": 1,
+    "updated_at": "2026-06-22",
+    "display_order": 8
+  }
+]

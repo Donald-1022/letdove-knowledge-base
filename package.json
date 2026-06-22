@@ -1,0 +1,32 @@
+{
+  "name": "letdove-library",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "preview": "wrangler pages dev out --r2=LETDOVE_IMAGES --binding R2_PUBLIC_BASE_URL=https://img.letdove.uk",
+    "deploy:cloudflare": "wrangler pages deploy out",
+    "verify:admin": "node scripts/verify-admin.mjs",
+    "verify:browser": "node scripts/verify-browser.mjs",
+    "verify:upload": "node scripts/verify-upload.mjs"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.17",
+    "fuse.js": "^7.4.2",
+    "lucide-react": "^0.468.0",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.1.17"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.6",
+    "@types/react-dom": "^19.2.3",
+    "playwright": "^1.61.0",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.103.0"
+  }
+}

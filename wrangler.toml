@@ -1,0 +1,9 @@
+name = "letdove-knowledge-base"
+pages_build_output_dir = "out"
+
+[[r2_buckets]]
+binding = "LETDOVE_IMAGES"
+bucket_name = "letdove-images"
+
+[vars]
+R2_PUBLIC_BASE_URL = "https://img.letdove.uk"
