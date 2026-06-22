@@ -60,23 +60,25 @@ If upload fails, the JSON draft is rolled back and no base64, blob URL, or previ
 npm run build
 ```
 
-The upload API is a Next.js App Router route in `src/app/api/images/upload/route.ts`.
+The static frontend is exported to `out/`. The upload API is a Cloudflare Pages Function in `functions/api/images/upload.js`.
 
 ## Cloudflare Deployment
 
 Use Cloudflare Pages for production:
 
 - Build command: `npm run build`
-- Output directory: Next.js default build output
+- Output directory: `out`
+- Functions directory: `functions`
 - R2 binding: `LETDOVE_IMAGES -> letdove-images`
 - Environment variable: `R2_PUBLIC_BASE_URL=https://img.letdove.uk`
 
-The upload endpoint is served by the Next.js App Router at `/api/images/upload`; do not implement it as a Server Action.
+The upload endpoint is served by Cloudflare Pages Functions at `/api/images/upload`.
 
 Wrangler uses:
 
 ```text
-app/api/images/upload/route.ts
+pages_build_output_dir = "out"
+binding = "LETDOVE_IMAGES"
 ```
 
 ## Cloudflare R2 Images
@@ -87,10 +89,10 @@ The admin image uploader first tries:
 POST /api/images/upload
 ```
 
-That endpoint is implemented as a Next.js App Router API route:
+That endpoint is implemented as a Cloudflare Pages Function:
 
 ```text
-src/app/api/images/upload/route.ts
+functions/api/images/upload.js
 ```
 
 Cloudflare configuration:
@@ -99,7 +101,7 @@ Cloudflare configuration:
 - R2 binding name: `LETDOVE_IMAGES`
 - Environment variable: `R2_PUBLIC_BASE_URL`
 
-`R2_PUBLIC_BASE_URL` should be `https://img.letdove.uk`. The App Router upload route reads R2 through runtime `env.LETDOVE_IMAGES` and uploads with `env.LETDOVE_IMAGES.put()`. The admin uploader refuses to save base64 image data; failed uploads leave the existing media unchanged.
+`R2_PUBLIC_BASE_URL` should be `https://img.letdove.uk`. The Pages Function reads R2 through `env.LETDOVE_IMAGES` and uploads with `env.LETDOVE_IMAGES.put()`. The admin uploader refuses to save base64 image data; failed uploads leave the existing media unchanged.
 
 Single-file upload success response:
 

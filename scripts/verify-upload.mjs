@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { GET, POST } from "../src/app/api/images/upload/route.ts";
+import { onRequestGet, onRequestPost } from "../functions/api/images/upload.js";
 
 const puts = [];
-globalThis.env = {
+const env = {
   R2_PUBLIC_BASE_URL: "https://img.letdove.uk",
   LETDOVE_IMAGES: {
     async put(key, body, options) {
@@ -33,7 +33,7 @@ async function postUpload({ files, category, letdoveCode, startIndex }) {
     body: formData,
     method: "POST"
   });
-  const response = await POST(request);
+  const response = await onRequestPost({ request, env });
 
   return {
     payload: await response.json(),
@@ -53,7 +53,7 @@ assert.equal(single.payload.success, true);
 assert.match(single.payload.key, /^letdove\/prompt\/p01_q01\/image_\d+\.png$/);
 assert.equal(single.payload.url, `https://img.letdove.uk/${single.payload.key}`);
 
-const getResponse = await GET();
+const getResponse = await onRequestGet();
 const getPayload = await getResponse.json();
 assert.equal(getResponse.status, 200);
 assert.equal(getPayload.success, true);
@@ -79,4 +79,4 @@ assert.deepEqual(
   ["image/jpeg", "image/png"]
 );
 
-console.log("Next App Router upload route verified: R2 put called and public URL returned.");
+console.log("Cloudflare Pages upload function verified: R2 put called and public URL returned.");
