@@ -66,7 +66,6 @@ export default async function LetDoveDetailPage({ params }: DetailPageProps) {
             <h1>{item.title}</h1>
             <div className="detail-meta-stack">
               <CopyableCode code={item.letdove_code} />
-              <span>{item.category_l1} / {item.category_l2}</span>
               <span>Created {item.created_at}</span>
             </div>
           </div>
@@ -75,7 +74,7 @@ export default async function LetDoveDetailPage({ params }: DetailPageProps) {
         <p className="detail-description">{item.description}</p>
 
         <div className="detail-blocks">
-          {item.cards.map((card) => (
+          {(item.cards ?? []).map((card) => (
             <section className="detail-block" key={card.label}>
               <h2>{card.label}</h2>
               <p>{card.body}</p>
@@ -83,7 +82,7 @@ export default async function LetDoveDetailPage({ params }: DetailPageProps) {
           ))}
         </div>
 
-        {item.links[0] && (
+        {item.links?.[0] && (
           <div className="detail-links">
             {item.links.map((link) => (
               <a className="chip" href={link.url} key={link.url} rel="noreferrer" target="_blank">

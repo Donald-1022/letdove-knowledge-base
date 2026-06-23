@@ -1,10 +1,14 @@
 const DATA_KEY = "letdove/data/items.json";
 
 export async function onRequestGet({ request, env }) {
-  const environment = getRuntimeEnvironment(request);
+  const environment = getRuntimeEnvironment(request, env);
 
   try {
-    const bucket = env.R2_BUCKET || env.LETDOVE_IMAGES;
+    if (environment === "local") {
+      return json({ environment, error: "Local API is UI-only and cannot access R2.", items: [], success: false }, 403);
+    }
+
+    const bucket = env.LETDOVE_IMAGES;
 
     if (!bucket) {
       return json({ environment, error: "R2 not bound", items: [], success: false }, 500);
@@ -47,31 +51,57 @@ export async function onRequestGet({ request, env }) {
 }
 
 function normalizeItemForOutput(item) {
-  const gallery = Array.isArray(item?.media?.gallery)
-    ? item.media.gallery.map(normalizeImageUrl).filter(Boolean)
-    : [];
-  const cover = normalizeImageUrl(item?.media?.cover) || gallery[0] || "";
+  const images = getItemImages(item)
+    .map((image) => normalizeStoredKey(image, item?.letdove_code || item?.id || ""))
+    .filter(Boolean);
+  const cover = normalizeStoredKey(item?.cover, item?.letdove_code || item?.id || "") || images[0] || "";
+  const status = ["draft", "published", "processing", "failed"].includes(item?.status) ? item.status : "draft";
+  const letdoveCode = String(item?.letdove_code || item?.id || "").trim();
 
   return {
-    ...item,
-    media: {
-      cover,
-      gallery
-    }
+    id: String(item?.id || letdoveCode).trim().toLowerCase(),
+    letdove_code: letdoveCode,
+    title: String(item?.title || ""),
+    description: String(item?.description || ""),
+    images,
+    cover,
+    status,
+    created_at: String(item?.created_at || ""),
+    updated_at: String(item?.updated_at || "")
   };
 }
 
-function normalizeImageUrl(value) {
+function getItemImages(item) {
+  if (Array.isArray(item?.images)) {
+    return item.images;
+  }
+
+  return item?.cover ? [item.cover] : [];
+}
+
+function normalizeStoredKey(value, code = "") {
   if (typeof value !== "string") {
     return "";
   }
 
-  return value
-    .replace(/^https:\/\/pub-[a-z0-9]+\.r2\.dev\//i, "https://img.letdove.uk/")
-    .replace(/^https:\/\/letdove\.uk\/letdove\//i, "https://img.letdove.uk/letdove/");
+  const cleaned = value.trim();
+
+  if (cleaned.startsWith("letdove/")) {
+    return cleaned;
+  }
+
+  return "";
 }
 
-function getRuntimeEnvironment(request) {
+function getRuntimeEnvironment(request, env = {}) {
+  if (env.CF_PAGES_ENVIRONMENT === "preview") {
+    return "preview";
+  }
+
+  if (env.CF_PAGES_ENVIRONMENT === "production") {
+    return "production";
+  }
+
   try {
     const host = new URL(request.url).hostname;
 

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import seedItems from "@/data/letdove.json";
+import { normalizeStoredKey, toUrl } from "@/lib/letdove-adapter";
 import type { LetDoveItem } from "@/lib/letdove";
 
 const authKey = "letdove-admin-token";
@@ -27,7 +28,7 @@ const storageKey = "letdove-admin-json";
 const maxUploadAttempts = 3;
 const dataSourcePath = "/api/items/list";
 
-type AdminStatus = "published" | "draft";
+type AdminStatus = "draft" | "published" | "processing" | "failed";
 type AdminView = "upload" | "notes" | "drafts";
 type MediaStatus = "local" | "uploading" | "uploaded" | "error";
 type AdminItem = LetDoveItem & {
@@ -41,16 +42,16 @@ type LoginResponse =
   | { success: false; error: string };
 
 type UploadResponse =
-  | { environment?: "local" | "production"; key?: string; size?: number; success: true; url?: string; urls: string[] }
-  | { environment?: "local" | "production"; error: string; success: false; urls: string[] };
+  | { environment?: "local" | "preview" | "production"; key: string; keys?: string[]; size?: number; success: true }
+  | { environment?: "local" | "preview" | "production"; error: string; success: false };
 
 type ItemsListResponse =
-  | { count?: number; environment?: "local" | "production"; items: LetDoveItem[]; key?: string; source?: string; success: true; updatedAt?: string | null }
-  | { environment?: "local" | "production"; error: string; items: LetDoveItem[]; success: false };
+  | { count?: number; environment?: "local" | "preview" | "production"; items: LetDoveItem[]; key?: string; source?: string; success: true; updatedAt?: string | null }
+  | { environment?: "local" | "preview" | "production"; error: string; items: LetDoveItem[]; success: false };
 
 type ItemsSaveResponse =
-  | { count: number; environment?: "local" | "production"; key: string; success: true; updatedAt: string }
-  | { environment?: "local" | "production"; error: string; success: false };
+  | { count: number; environment?: "local" | "preview" | "production"; key: string; success: true; updatedAt: string }
+  | { environment?: "local" | "preview" | "production"; error: string; success: false };
 
 type MediaDraft = {
   aspectRatio?: number;
@@ -65,7 +66,7 @@ type MediaDraft = {
   size: number;
   source: "local" | "r2";
   status: MediaStatus;
-  uploadEnvironment?: "local" | "production";
+  uploadEnvironment?: "local" | "preview" | "production";
   uploadedSize?: number;
 };
 
@@ -89,7 +90,7 @@ export function AdminDashboard() {
   const [previewDraft, setPreviewDraft] = useState<MediaDraft | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [noteDragIndex, setNoteDragIndex] = useState<number | null>(null);
-  const [dataEnvironment, setDataEnvironment] = useState<"local" | "production" | "unknown">("unknown");
+  const [dataEnvironment, setDataEnvironment] = useState<"local" | "preview" | "production" | "unknown">("unknown");
   const [dataStatus, setDataStatus] = useState<"loading" | "local-backup" | "unsaved" | "saving" | "saved" | "error">("loading");
   const [lastLoadedAt, setLastLoadedAt] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState("");
@@ -138,10 +139,7 @@ export function AdminDashboard() {
       const searchable = [
         item.letdove_code,
         item.title,
-        item.category_l1,
-        item.category_l2,
-        item.series,
-        ...item.tags
+        item.description
       ].join(" ").toLowerCase();
 
       return statusMatch && (!normalizedQuery || searchable.includes(normalizedQuery));
@@ -161,12 +159,12 @@ export function AdminDashboard() {
   );
 
   const allMedia = useMemo(() => {
-    const existing = (selectedItem?.media.gallery ?? []).map((url, index): MediaDraft => ({
-      id: `r2-${url}-${index}`,
-      name: getImageName(url),
-      previewUrl: url,
+    const existing = (selectedItem?.images ?? []).map((key, index): MediaDraft => ({
+      id: `r2-${key}-${index}`,
+      name: getImageName(key),
+      previewUrl: toUrl(key),
       progress: 100,
-      publicUrl: url,
+      publicUrl: key,
       size: 0,
       source: "r2",
       status: "uploaded"
@@ -285,7 +283,7 @@ export function AdminDashboard() {
   async function saveItemsToServer(nextItems: AdminItem[] = items) {
     if (!token) {
       setDataStatus("local-backup");
-      return;
+      return false;
     }
 
     if (saveTimerRef.current) {
@@ -315,10 +313,12 @@ export function AdminDashboard() {
       setLastSavedAt(new Date(payload.updatedAt).toLocaleString());
       setDataStatus("saved");
       setNotice(`Saved ${payload.count} cards to R2 metadata.`);
+      return true;
     } catch (error) {
       setDataStatus("error");
       setSaveError(error instanceof Error ? error.message : "Failed to save R2 metadata.");
       setNotice("Save failed. Local backup is still preserved in this browser.");
+      return false;
     }
   }
 
@@ -411,7 +411,6 @@ export function AdminDashboard() {
     try {
       const data = JSON.parse(await file.text()) as {
         caption?: string;
-        hashtags?: string[];
         post_title?: string;
         publish_status?: string;
       };
@@ -419,7 +418,6 @@ export function AdminDashboard() {
       updateSelected({
         description: data.caption ?? selectedItem.description,
         status: data.publish_status === "draft" ? "draft" : selectedItem.status,
-        tags: Array.isArray(data.hashtags) ? data.hashtags.map((tag) => tag.replace(/^#/, "")) : selectedItem.tags,
         title: data.post_title ?? selectedItem.title
       }, "immediate");
       setNotice("publish.json imported into the current note fields.");
@@ -512,7 +510,7 @@ export function AdminDashboard() {
     let lastError = "Upload failed.";
 
     for (let attempt = 1; attempt <= maxUploadAttempts; attempt += 1) {
-      const result = await uploadFile(draft.file, item, item.media.gallery.length + mediaDrafts.filter((entry) => entry.status === "uploaded").length + 1, token);
+      const result = await uploadFile(draft.file, item, item.images.length + mediaDrafts.filter((entry) => entry.status === "uploaded").length + 1, token);
 
       if (result.ok) {
         if (draft.source === "local") {
@@ -521,18 +519,23 @@ export function AdminDashboard() {
         markDraft(draft.id, {
           key: result.key,
           progress: 100,
-          publicUrl: result.url,
+          previewUrl: toUrl(result.key),
+          publicUrl: result.key,
           status: "uploaded",
           uploadEnvironment: result.environment,
           uploadedSize: result.size
         });
-        appendUploadedUrl(item.id, result.url);
+        try {
+          await appendUploadedKey(item.id, result.key);
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : "Metadata sync failed after upload.";
+          await rollbackUploadedKey(result.key);
+          markDraft(draft.id, { error: lastError, progress: 0, status: "error" });
+          return;
+        }
+
         setMediaDrafts((current) => current.filter((entry) => entry.id !== draft.id));
-        setNotice(
-          result.environment === "local"
-            ? `${draft.name} uploaded to local Wrangler R2. The CDN URL may 404 until the same key is uploaded in production.`
-            : `${draft.name} uploaded to production R2. Key: ${result.key}`
-        );
+        setNotice(`${draft.name} uploaded to production R2 and synced to metadata. Key: ${result.key}`);
         return;
       }
 
@@ -547,30 +550,38 @@ export function AdminDashboard() {
     markDraft(draft.id, { error: lastError, progress: 0, status: "error" });
   }
 
-  function appendUploadedUrl(itemId: string, url: string) {
+  async function appendUploadedKey(itemId: string, key: string) {
+    let nextItems: AdminItem[] = [];
+
     setItems((currentItems) => {
-      const nextItems = normalizeItems(currentItems.map((item) => {
-      if (item.id !== itemId || item.media.gallery.includes(url)) {
+      nextItems = normalizeItems(currentItems.map((item) => {
+      if (item.id !== itemId || item.images.includes(key)) {
         return item;
       }
 
-      const gallery = [...item.media.gallery, url];
+      const images = [...item.images, key];
 
       return normalizeItem({
         ...item,
-        media: {
-          cover: item.media.cover || url,
-          gallery
-        },
+        cover: item.cover || key,
+        images,
         updated_at: new Date().toISOString()
       });
       }));
 
       window.localStorage.setItem(storageKey, JSON.stringify(nextItems, null, 2));
-      void saveItemsToServer(nextItems);
       return nextItems;
     });
-    setNotice("Uploaded image URL saved to R2 metadata.");
+
+    if (nextItems.length) {
+      const saved = await saveItemsToServer(nextItems);
+
+      if (!saved) {
+        throw new Error("Uploaded object was not attached because metadata save failed.");
+      }
+    }
+
+    setNotice("Uploaded image key saved to R2 metadata.");
   }
 
   async function uploadFile(file: File, item: AdminItem, startIndex: number, authToken: string) {
@@ -586,7 +597,6 @@ export function AdminDashboard() {
         headers: {
           ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
           "content-type": file.type || "application/octet-stream",
-          "x-letdove-category": item.category_l1 || "",
           "x-letdove-code": item.letdove_code || "",
           "x-letdove-file-name": encodeURIComponent(file.name || `image_${Date.now()}`),
           "x-letdove-start-index": String(startIndex)
@@ -613,19 +623,37 @@ export function AdminDashboard() {
       };
     }
 
-    const url = parsed.data.urls?.[0];
+    const key = parsed.data.keys?.[0] ?? parsed.data.key;
 
-    if (!url || !isPersistableImageUrl(url)) {
-      return { error: "Upload API did not return a confirmed public R2 URL.", ok: false as const };
+    if (!key || !isPersistableImageKey(key)) {
+      return { error: "Upload API did not return a confirmed R2 key.", ok: false as const };
     }
 
     return {
       environment: parsed.data.environment ?? "production",
-      key: parsed.data.key ?? getImageName(url),
+      key,
       ok: true as const,
-      size: parsed.data.size,
-      url
+      size: parsed.data.size
     };
+  }
+
+  async function rollbackUploadedKey(key: string) {
+    if (!token || !key) {
+      return;
+    }
+
+    try {
+      await fetch("/api/images/delete", {
+        body: JSON.stringify({ key }),
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json"
+        },
+        method: "POST"
+      });
+    } catch {
+      setNotice("Metadata sync failed and rollback request could not be sent.");
+    }
   }
 
   async function readUploadResponse(response: Response): Promise<ParsedUploadResponse> {
@@ -656,17 +684,15 @@ export function AdminDashboard() {
       return;
     }
 
-    const existingCount = selectedItem.media.gallery.length;
+    const existingCount = selectedItem.images.length;
 
     if (dragIndex < existingCount && targetIndex < existingCount) {
-      const gallery = [...selectedItem.media.gallery];
-      const [dragged] = gallery.splice(dragIndex, 1);
-      gallery.splice(targetIndex, 0, dragged);
+      const images = [...selectedItem.images];
+      const [dragged] = images.splice(dragIndex, 1);
+      images.splice(targetIndex, 0, dragged);
       updateSelected({
-        media: {
-          cover: gallery.includes(selectedItem.media.cover) ? selectedItem.media.cover : gallery[0] ?? "",
-          gallery
-        }
+        cover: images.includes(selectedItem.cover) ? selectedItem.cover : images[0] ?? "",
+        images
       });
     } else if (dragIndex >= existingCount && targetIndex >= existingCount) {
       const local = [...mediaDrafts];
@@ -700,12 +726,10 @@ export function AdminDashboard() {
 
   function removeMedia(draft: MediaDraft) {
     if (draft.source === "r2" && selectedItem) {
-      const gallery = selectedItem.media.gallery.filter((url) => url !== draft.publicUrl);
+      const images = selectedItem.images.filter((url) => url !== draft.publicUrl);
       updateSelected({
-        media: {
-          cover: gallery.includes(selectedItem.media.cover) ? selectedItem.media.cover : gallery[0] ?? "",
-          gallery
-        }
+        cover: images.includes(selectedItem.cover) ? selectedItem.cover : images[0] ?? "",
+        images
       });
       return;
     }
@@ -722,10 +746,8 @@ export function AdminDashboard() {
     }
 
     updateSelected({
-      media: {
-        cover: url,
-        gallery: selectedItem?.media.gallery ?? []
-      }
+      cover: url,
+      images: selectedItem?.images ?? []
     });
   }
 
@@ -860,17 +882,13 @@ export function AdminDashboard() {
               <Field label="标题" value={selectedItem.title} onChange={(value) => updateSelected({ title: value })} />
               <Field label="LetDove code" value={selectedItem.letdove_code} onChange={(value) => updateSelected({ letdove_code: value })} />
               <Field label="描述" multiline value={selectedItem.description} onChange={(value) => updateSelected({ description: value })} />
-              <Field label="标签" value={selectedItem.tags.join(", ")} onChange={(value) => updateSelected({ tags: splitCsv(value) })} />
-              <div className="admin-xhs-two">
-                <Field label="一级分类" value={selectedItem.category_l1} onChange={(value) => updateSelected({ category_l1: value })} />
-                <Field label="二级分类" value={selectedItem.category_l2} onChange={(value) => updateSelected({ category_l2: value })} />
-              </div>
-              <Field label="系列" value={selectedItem.series} onChange={(value) => updateSelected({ series: value })} />
               <label className="admin-v3-field">
                 <span>状态</span>
                 <select value={selectedItem.status} onChange={(event) => updateSelected({ status: event.target.value as AdminStatus })}>
                   <option value="draft">draft</option>
                   <option value="published">published</option>
+                  <option value="processing">processing</option>
+                  <option value="failed">failed</option>
                 </select>
               </label>
               {notice && <p className="admin-xhs-alert">{notice}</p>}
@@ -901,7 +919,7 @@ export function AdminDashboard() {
                   onDragStart={() => setNoteDragIndex(index)}
                   onDrop={() => reorderNote(index)}
                 >
-                  {item.media.cover ? <img alt="" src={item.media.cover} /> : <span>No image</span>}
+                  {item.cover ? <img alt="" src={toUrl(item.cover)} /> : <span>No image</span>}
                   <section>
                     <code>{item.letdove_code}</code>
                     <h3>{item.title}</h3>
@@ -1016,39 +1034,27 @@ function normalizeItems(items: LetDoveItem[]) {
 
 function normalizeItem(item: Partial<LetDoveItem> & { display_order?: number }) {
   const displayOrder = item.display_order ?? item.order ?? 1;
-  const media = {
-    cover: normalizeImageUrl(item.media?.cover ?? ""),
-    gallery: (item.media?.gallery ?? []).filter(
-      (url): url is string => typeof url === "string" && !url.startsWith("data:") && !url.startsWith("blob:")
-    ).map(normalizeImageUrl)
-  };
-
-  if (typeof media.cover !== "string" || media.cover.startsWith("data:") || media.cover.startsWith("blob:")) {
-    media.cover = media.gallery[0] ?? "";
-  }
+  const images = (item.images ?? [])
+    .map((image) => normalizeStoredKey(image, item.letdove_code || item.id || ""))
+    .filter(isPersistableImageKey);
+  const cover = normalizeStoredKey(item.cover || images[0] || "", item.letdove_code || item.id || "");
+  const status = ["draft", "published", "processing", "failed"].includes(String(item.status))
+    ? item.status as AdminStatus
+    : "draft";
 
   return {
     id: item.id ?? `ld_${Date.now()}`,
     letdove_code: item.letdove_code ?? "NEW_CARD",
     title: item.title ?? "Untitled card",
     description: item.description ?? "",
-    media,
-    category_l1: item.category_l1 ?? "prompt",
-    category_l2: item.category_l2 ?? "general",
-    series: item.series ?? "Draft Series",
-    tags: item.tags ?? [],
-    cards: item.cards ?? [],
-    links: item.links ?? [],
+    images,
+    cover,
     created_at: item.created_at ?? new Date().toISOString().slice(0, 10),
     updated_at: item.updated_at ?? new Date().toISOString(),
     order: displayOrder,
     display_order: displayOrder,
-    pinned: item.pinned ?? false,
     visible: item.visible ?? true,
-    status: item.status === "published" ? "published" : "draft",
-    sop: item.sop ?? "",
-    internal_links: item.internal_links ?? [],
-    version: item.version ?? 1,
+    status,
     search_index: buildSearchIndex(item)
   } satisfies AdminItem;
 }
@@ -1059,18 +1065,12 @@ function createItem(index: number): AdminItem {
     letdove_code: `NEW_${String(index).padStart(2, "0")}`,
     title: "Untitled card",
     description: "",
-    category_l1: "prompt",
-    category_l2: "general",
-    series: "Draft Series",
-    tags: [],
     status: "draft",
     visible: true,
     display_order: index,
     order: index,
-    media: {
-      cover: "",
-      gallery: []
-    }
+    cover: "",
+    images: []
   });
 }
 
@@ -1078,19 +1078,10 @@ function buildSearchIndex(item: Partial<LetDoveItem>) {
   return [
     item.title,
     item.description,
-    ...(item.tags ?? []),
-    item.category_l1,
-    item.category_l2
+    item.letdove_code
   ]
     .filter(Boolean)
     .join(" ");
-}
-
-function splitCsv(value: string) {
-  return value
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
 }
 
 function readImageDimensions(url: string) {
@@ -1118,14 +1109,8 @@ function formatBytes(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function isPersistableImageUrl(value: string) {
-  return /^https?:\/\/.+/i.test(value) && !value.startsWith("data:") && !value.startsWith("blob:");
-}
-
-function normalizeImageUrl(value: string) {
-  return value
-    .replace(/^https:\/\/pub-[a-z0-9]+\.r2\.dev\//i, "https://img.letdove.uk/")
-    .replace(/^https:\/\/letdove\.uk\/letdove\//i, "https://img.letdove.uk/letdove/");
+function isPersistableImageKey(value: string) {
+  return /^letdove\/[a-z0-9_-]+\/[^/]+$/i.test(value);
 }
 
 function getDataStatusLabel(status: "loading" | "local-backup" | "unsaved" | "saving" | "saved" | "error") {

@@ -1,17 +1,20 @@
 export async function onRequestGet({ request }) {
   return json({
     environment: getRuntimeEnvironment(request),
-    success: true,
-    urls: []
+    success: true
   });
 }
 
 export async function onRequestPost({ request, env }) {
-  const environment = getRuntimeEnvironment(request);
+  const environment = getRuntimeEnvironment(request, env);
 
   try {
     if (!(await isAuthorized(request, env))) {
-      return json({ environment, success: false, urls: [], error: "Unauthorized upload request" }, 401);
+      return json({ environment, success: false, error: "Unauthorized upload request" }, 401);
+    }
+
+    if (environment !== "production") {
+      return json({ environment, success: false, error: "R2 writes are only allowed in production." }, 403);
     }
 
     const upload = await readUploadInput(request);
@@ -21,28 +24,23 @@ export async function onRequestPost({ request, env }) {
         contentType: request.headers.get("content-type"),
         fileName: request.headers.get("x-letdove-file-name")
       });
-      return json({ environment, success: false, urls: [], error: "Invalid file input" }, 400);
+      return json({ environment, success: false, error: "Invalid file input" }, 400);
     }
 
-    const bucket = env.R2_BUCKET || env.LETDOVE_IMAGES;
+    const bucket = env.LETDOVE_IMAGES;
 
     if (!bucket) {
       console.error("R2 binding missing", {
-        hasLETDOVE_IMAGES: Boolean(env.LETDOVE_IMAGES),
-        hasR2_BUCKET: Boolean(env.R2_BUCKET)
+        hasLETDOVE_IMAGES: Boolean(env.LETDOVE_IMAGES)
       });
-      return json({ environment, success: false, urls: [], error: "R2 not bound" }, 500);
+      return json({ environment, success: false, error: "R2 not bound" }, 500);
     }
 
     const letdoveCode = sanitizePathSegment(upload.letdoveCode || "uncategorized");
     const key = `letdove/${letdoveCode}/${getSafeFileName(upload.name)}`;
 
-    const baseUrl = getPublicBaseUrl(env);
-    const publicUrl = `${baseUrl}/${encodeR2Key(key)}`;
-
     console.log("UPLOAD KEY:", key);
     console.log("BUCKET:", bucket);
-    console.log("FINAL URL:", publicUrl);
     console.log("R2 WRITE START", key);
 
     try {
@@ -53,7 +51,7 @@ export async function onRequestPost({ request, env }) {
       });
     } catch (error) {
       console.error("R2 WRITE FAILED", key, error);
-      return json({ environment, success: false, urls: [], error: `R2 write failed: ${String(error)}` }, 500);
+      return json({ environment, success: false, error: `R2 write failed: ${String(error)}` }, 500);
     }
 
     console.log("R2 WRITE SUCCESS", key);
@@ -65,7 +63,8 @@ export async function onRequestPost({ request, env }) {
 
       if (!writtenObject) {
         console.error("R2 HEAD FAILED", key);
-        return json({ environment, success: false, urls: [], error: `R2 write did not produce an object for key: ${key}` }, 500);
+        await rollbackObject(bucket, key);
+        return json({ environment, success: false, error: `R2 write did not produce an object for key: ${key}` }, 500);
       }
 
       writtenSize = writtenObject.size ?? writtenSize;
@@ -75,14 +74,13 @@ export async function onRequestPost({ request, env }) {
     return json({
       environment,
       key,
+      keys: [key],
       size: writtenSize,
-      success: true,
-      url: publicUrl,
-      urls: [publicUrl]
+      success: true
     });
   } catch (err) {
     console.error("UPLOAD ERROR:", err);
-    return json({ environment, success: false, urls: [], error: String(err) }, 500);
+    return json({ environment, success: false, error: String(err) }, 500);
   }
 }
 
@@ -104,7 +102,6 @@ async function readUploadInput(request) {
 
     return {
       body: typeof file.stream === "function" ? file.stream() : await file.arrayBuffer(),
-      category: String(formData.get("category") || ""),
       contentType: typeof file.type === "string" && file.type ? file.type : "application/octet-stream",
       letdoveCode: String(formData.get("letdove_code") || ""),
       name: typeof file.name === "string" ? file.name : "image",
@@ -121,7 +118,6 @@ async function readUploadInput(request) {
 
   return {
     body,
-    category: request.headers.get("x-letdove-category") || "",
     contentType: contentType || "application/octet-stream",
     letdoveCode: request.headers.get("x-letdove-code") || "",
     name: fileName,
@@ -129,24 +125,26 @@ async function readUploadInput(request) {
   };
 }
 
-function getRuntimeEnvironment(request) {
+function getRuntimeEnvironment(request, env = {}) {
+  if (env.CF_PAGES_ENVIRONMENT === "preview") {
+    return "preview";
+  }
+
+  if (env.CF_PAGES_ENVIRONMENT === "production") {
+    return "production";
+  }
+
   try {
     const host = new URL(request.url).hostname;
 
-    return host === "localhost" || host === "127.0.0.1" || host === "::1" ? "local" : "production";
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+      return "local";
+    }
+
+    return "production";
   } catch {
     return "production";
   }
-}
-
-function getPublicBaseUrl(env) {
-  const configured = String(env.R2_PUBLIC_BASE_URL || "https://img.letdove.uk").replace(/\/$/, "");
-
-  if (/^https:\/\/pub-[a-z0-9]+\.r2\.dev$/i.test(configured) || configured === "https://letdove.uk") {
-    return "https://img.letdove.uk";
-  }
-
-  return configured;
 }
 
 async function isAuthorized(request, env) {
@@ -237,6 +235,19 @@ function getSafeFileName(name) {
   const fallback = `image_${Date.now()}.png`;
 
   return cleaned && cleaned.includes(".") ? cleaned : fallback;
+}
+
+async function rollbackObject(bucket, key) {
+  if (typeof bucket.delete !== "function") {
+    return;
+  }
+
+  try {
+    await bucket.delete(key);
+    console.log("R2 ROLLBACK SUCCESS", key);
+  } catch (error) {
+    console.error("R2 ROLLBACK FAILED", key, error);
+  }
 }
 
 function safeDecodeURIComponent(value) {

@@ -30,22 +30,15 @@ const env = {
 const token = await createToken("admin", Date.now() + 60_000, env.ADMIN_PASS);
 const items = [
   {
-    category_l1: "prompt",
-    category_l2: "product",
     created_at: "2026-06-22",
     description: "Unified data test",
     id: "ld_test",
     letdove_code: "T01_Q01",
-    media: {
-      cover: "https://img.letdove.uk/letdove/t01_q01/cover.png",
-      gallery: ["https://img.letdove.uk/letdove/t01_q01/cover.png"]
-    },
-    search_index: "",
-    series: "Test Series",
+    cover: "letdove/t01_q01/cover.png",
+    images: ["letdove/t01_q01/cover.png"],
     status: "published",
-    tags: ["AI", "Sync"],
     title: "Unified Metadata",
-    visible: true
+    updated_at: "2026-06-22T00:00:00.000Z"
   }
 ];
 
@@ -54,10 +47,26 @@ const emptyList = await onRequestGet({
   request: new Request("http://localhost/api/items/list")
 });
 const emptyPayload = await emptyList.json();
-assert.equal(emptyList.status, 200);
-assert.equal(emptyPayload.success, true);
+assert.equal(emptyList.status, 403);
+assert.equal(emptyPayload.success, false);
 assert.equal(emptyPayload.environment, "local");
 assert.deepEqual(emptyPayload.items, []);
+
+const previewSave = await onRequestPost({
+  env: { ...env, CF_PAGES_ENVIRONMENT: "preview" },
+  request: new Request("https://preview.letdove.pages.dev/api/items/save", {
+    body: JSON.stringify({ items }),
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json"
+    },
+    method: "POST"
+  })
+});
+const previewSavePayload = await previewSave.json();
+assert.equal(previewSave.status, 403);
+assert.equal(previewSavePayload.success, false);
+assert.equal(previewSavePayload.environment, "preview");
 
 const unauthorized = await onRequestPost({
   env,
@@ -96,7 +105,19 @@ assert.equal(listPayload.success, true);
 assert.equal(listPayload.environment, "production");
 assert.equal(listPayload.items.length, 1);
 assert.equal(listPayload.items[0].letdove_code, "T01_Q01");
-assert.equal(listPayload.items[0].search_index.includes("Unified Metadata"), true);
+assert.deepEqual(listPayload.items[0].images, ["letdove/t01_q01/cover.png"]);
+assert.equal(listPayload.items[0].cover, "letdove/t01_q01/cover.png");
+assert.deepEqual(Object.keys(listPayload.items[0]).sort(), [
+  "cover",
+  "created_at",
+  "description",
+  "id",
+  "images",
+  "letdove_code",
+  "status",
+  "title",
+  "updated_at"
+]);
 
 console.log("R2 metadata list/save functions verified.");
 

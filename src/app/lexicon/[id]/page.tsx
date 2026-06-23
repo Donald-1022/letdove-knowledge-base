@@ -75,16 +75,8 @@ export default async function DetailPage({ params }: DetailPageProps) {
             <span className="created-note">Created {item.created_at}</span>
             <p className="post-description">{item.description}</p>
 
-            <div className="taxonomy-line">
-              <span>L1 {item.category_l1}</span>
-              <span>/</span>
-              <span>L2 {item.category_l2}</span>
-              <span>·</span>
-              <span>{item.series}</span>
-            </div>
-
             <div className="block-list">
-              {item.cards.map((card) => (
+              {(item.cards ?? []).map((card) => (
                 <section className="block-item" key={card.label}>
                   <strong className="block-label">{card.label}</strong>
                   <p className="block-body">{card.body}</p>
@@ -94,7 +86,7 @@ export default async function DetailPage({ params }: DetailPageProps) {
 
           </div>
 
-          {item.links[0] && (
+          {item.links?.[0] && (
             <footer className="post-footer">
               <a className="chip" href={item.links[0].url} rel="noreferrer" target="_blank">
                 {item.links[0].label}

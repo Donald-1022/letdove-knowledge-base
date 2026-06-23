@@ -4,82 +4,37 @@ import {
   ChevronLeft,
   ChevronRight,
   Images,
-  Layers,
   Moon,
   Search,
   Sun
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { adaptItems, type LetDoveViewItem } from "@/lib/letdove-adapter";
 import { getItemImages, searchLetDoveItems, type LetDoveItem } from "@/lib/letdove";
 import { ShareActions } from "@/components/share-actions";
 
 type LexiconExplorerProps = {
-  items: LetDoveItem[];
-  categoryL1Options: string[];
-  categoryL2Options: string[];
-  series: string[];
+  items: LetDoveViewItem[];
 };
 
-const ALL = "all";
-
 type ItemsListResponse =
-  | { environment?: "local" | "production"; items: LetDoveItem[]; success: true; updatedAt?: string | null }
+  | { environment?: "local" | "preview" | "production"; items: LetDoveItem[]; success: true; updatedAt?: string | null }
   | { error: string; items: LetDoveItem[]; success: false };
 
 export function LexiconExplorer({
-  items,
-  categoryL1Options,
-  categoryL2Options,
-  series
+  items
 }: LexiconExplorerProps) {
   const [query, setQuery] = useState("");
-  const [categoryL1, setCategoryL1] = useState(ALL);
-  const [categoryL2, setCategoryL2] = useState(ALL);
-  const [selectedSeries, setSelectedSeries] = useState(ALL);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [liveItems, setLiveItems] = useState(items);
+  const [liveItems, setLiveItems] = useState<LetDoveViewItem[]>(items);
   const [dataNotice, setDataNotice] = useState("");
 
-  const liveCategoryL1Options = useMemo(
-    () => Array.from(new Set(liveItems.map((item) => item.category_l1))).sort(),
-    [liveItems]
-  );
-  const liveCategoryL2Options = useMemo(
-    () => Array.from(new Set(liveItems.map((item) => item.category_l2))).sort(),
-    [liveItems]
-  );
-  const liveSeries = useMemo(
-    () => Array.from(new Set(liveItems.map((item) => item.series))).sort(),
-    [liveItems]
-  );
-
-  const l2Options = useMemo(() => {
-    if (categoryL1 === ALL) {
-      return liveCategoryL2Options.length ? liveCategoryL2Options : categoryL2Options;
-    }
-
-    return Array.from(
-      new Set(
-        liveItems
-          .filter((item) => item.category_l1 === categoryL1)
-          .map((item) => item.category_l2)
-      )
-    ).sort();
-  }, [categoryL1, categoryL2Options, liveCategoryL2Options, liveItems]);
-
   const visibleItems = useMemo(() => {
-    const categoryFiltered = liveItems.filter((item) => {
-      const l1Match = categoryL1 === ALL || item.category_l1 === categoryL1;
-      const l2Match = categoryL2 === ALL || item.category_l2 === categoryL2;
-      const seriesMatch = selectedSeries === ALL || item.series === selectedSeries;
-      const visibleMatch = item.visible !== false && item.status !== "draft";
+    const publishedItems = liveItems.filter((item) => item.status === "published");
 
-      return l1Match && l2Match && seriesMatch && visibleMatch;
-    });
-
-    return searchLetDoveItems(query, categoryFiltered);
-  }, [categoryL1, categoryL2, liveItems, query, selectedSeries]);
+    return searchLetDoveItems(query, publishedItems);
+  }, [liveItems, query]);
 
   const selectedItem = useMemo(
     () => liveItems.find((item) => item.id === selectedId) ?? null,
@@ -117,7 +72,7 @@ export function LexiconExplorer({
           return;
         }
 
-        setLiveItems(payload.items);
+        setLiveItems(adaptItems(payload.items));
         setDataNotice(`Live R2 metadata loaded${payload.environment ? ` · ${payload.environment}` : ""}`);
       } catch {
         if (active) {
@@ -132,12 +87,6 @@ export function LexiconExplorer({
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (categoryL2 !== ALL && !l2Options.includes(categoryL2)) {
-      setCategoryL2(ALL);
-    }
-  }, [categoryL2, l2Options]);
 
   useEffect(() => {
     const syncFromUrl = () => {
@@ -194,9 +143,6 @@ export function LexiconExplorer({
 
   function resetFilters() {
     setQuery("");
-    setCategoryL1(ALL);
-    setCategoryL2(ALL);
-    setSelectedSeries(ALL);
   }
 
   return (
@@ -227,12 +173,12 @@ export function LexiconExplorer({
               <span className="metric-label">cards</span>
             </div>
             <div className="metric">
-              <span className="metric-value">{liveCategoryL1Options.length || categoryL1Options.length}</span>
-              <span className="metric-label">L1</span>
+              <span className="metric-value">{visibleItems.length}</span>
+              <span className="metric-label">live</span>
             </div>
             <div className="metric">
-              <span className="metric-value">{liveCategoryL2Options.length || categoryL2Options.length}</span>
-              <span className="metric-label">L2</span>
+              <span className="metric-value">{liveItems.filter((item) => item.status === "draft").length}</span>
+              <span className="metric-label">drafts</span>
             </div>
           </div>
         </div>
@@ -250,61 +196,13 @@ export function LexiconExplorer({
           />
         </label>
 
-        <label className="select-shell">
-          <Layers aria-hidden="true" />
-          <select
-            aria-label="Filter by L1 category"
-            onChange={(event) => setCategoryL1(event.target.value)}
-            value={categoryL1}
-          >
-            <option value={ALL}>All L1</option>
-            {(liveCategoryL1Options.length ? liveCategoryL1Options : categoryL1Options).map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="select-shell">
-          <Layers aria-hidden="true" />
-          <select
-            aria-label="Filter by L2 category"
-            onChange={(event) => setCategoryL2(event.target.value)}
-            value={categoryL2}
-          >
-            <option value={ALL}>All L2</option>
-            {l2Options.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="select-shell">
-          <Layers aria-hidden="true" />
-          <select
-            aria-label="Filter by series"
-            onChange={(event) => setSelectedSeries(event.target.value)}
-            value={selectedSeries}
-          >
-            <option value={ALL}>All series</option>
-            {(liveSeries.length ? liveSeries : series).map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-
       </section>
       <div className="grid-meta">
         <span>
           Showing <code>{visibleItems.length}</code> of <code>{items.length}</code>
           {dataNotice && <span> · {dataNotice}</span>}
         </span>
-        {(query || categoryL1 !== ALL || categoryL2 !== ALL || selectedSeries !== ALL) && (
+        {query && (
           <button className="chip" onClick={resetFilters} type="button">
             Reset filters
           </button>
@@ -315,7 +213,7 @@ export function LexiconExplorer({
         <section
           className="lexicon-grid"
           aria-label="LetDove card grid"
-          key={`${query}-${categoryL1}-${categoryL2}-${visibleItems.map((item) => item.id).join("-")}`}
+          key={`${query}-${visibleItems.map((item) => item.id).join("-")}`}
         >
           {visibleItems.map((item) => {
             const images = getItemImages(item);
@@ -347,7 +245,7 @@ export function LexiconExplorer({
         </section>
       ) : (
         <section className="empty-state">
-          <p>No cards match this view. Try a broader code, L1, L2, or series.</p>
+          <p>No cards match this view. Try a broader title, code, or description.</p>
         </section>
       )}
 
@@ -362,7 +260,7 @@ export function LexiconExplorer({
 }
 
 type PostModalProps = {
-  item: LetDoveItem;
+  item: LetDoveViewItem;
   onClose: () => void;
 };
 
@@ -436,16 +334,8 @@ function PostModal({ item, onClose }: PostModalProps) {
             <span className="created-note">Created {item.created_at}</span>
             <p className="post-description">{item.description}</p>
 
-            <div className="taxonomy-line">
-              <span>L1 {item.category_l1}</span>
-              <span>/</span>
-              <span>L2 {item.category_l2}</span>
-              <span>·</span>
-              <span>{item.series}</span>
-            </div>
-
             <div className="block-list">
-              {item.cards.map((card) => (
+              {(item.cards ?? []).map((card) => (
                 <section className="block-item" key={card.label}>
                   <strong className="block-label">{card.label}</strong>
                   <p className="block-body">{card.body}</p>

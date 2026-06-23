@@ -1,14 +1,18 @@
 const DATA_KEY = "letdove/data/items.json";
 
 export async function onRequestPost({ request, env }) {
-  const environment = getRuntimeEnvironment(request);
+  const environment = getRuntimeEnvironment(request, env);
 
   try {
     if (!(await isAuthorized(request, env))) {
       return json({ environment, error: "Unauthorized save request", success: false }, 401);
     }
 
-    const bucket = env.R2_BUCKET || env.LETDOVE_IMAGES;
+    if (environment !== "production") {
+      return json({ environment, error: "Metadata writes are only allowed in production.", success: false }, 403);
+    }
+
+    const bucket = env.LETDOVE_IMAGES;
 
     if (!bucket) {
       return json({ environment, error: "R2 not bound", success: false }, 500);
@@ -96,7 +100,15 @@ function getSessionSecret(env) {
   return env.ADMIN_SESSION_SECRET || env.ADMIN_PASS || "letdove-local-admin";
 }
 
-function getRuntimeEnvironment(request) {
+function getRuntimeEnvironment(request, env = {}) {
+  if (env.CF_PAGES_ENVIRONMENT === "preview") {
+    return "preview";
+  }
+
+  if (env.CF_PAGES_ENVIRONMENT === "production") {
+    return "production";
+  }
+
   try {
     const host = new URL(request.url).hostname;
 
@@ -107,49 +119,52 @@ function getRuntimeEnvironment(request) {
 }
 
 function normalizeItemForStorage(item) {
-  const gallery = Array.isArray(item?.media?.gallery)
-    ? item.media.gallery.map(normalizeImageUrl).filter(isPersistableImageUrl)
-    : [];
-  const normalizedCover = normalizeImageUrl(item?.media?.cover);
-  const cover = isPersistableImageUrl(normalizedCover) ? normalizedCover : gallery[0] ?? "";
+  const images = getItemImages(item)
+    .map((image) => normalizeStoredKey(image, item?.letdove_code || item?.id || ""))
+    .filter(isPersistableImageKey);
+  const normalizedCover = normalizeStoredKey(item?.cover, item?.letdove_code || item?.id || "");
+  const cover = isPersistableImageKey(normalizedCover) ? normalizedCover : images[0] ?? "";
+  const status = ["draft", "published", "processing", "failed"].includes(item?.status) ? item.status : "draft";
+  const letdoveCode = String(item?.letdove_code || item?.id || `LD_${Date.now()}`).trim();
+  const id = String(item?.id || letdoveCode).trim().toLowerCase();
 
   return {
-    ...item,
-    media: {
-      cover,
-      gallery
-    },
-    search_index: buildSearchIndex(item),
+    id,
+    letdove_code: letdoveCode,
+    title: String(item?.title || ""),
+    description: String(item?.description || ""),
+    images,
+    cover,
+    status,
+    created_at: String(item?.created_at || new Date().toISOString().slice(0, 10)),
     updated_at: new Date().toISOString()
   };
 }
 
-function buildSearchIndex(item) {
-  return [
-    item?.title,
-    item?.description,
-    ...(Array.isArray(item?.tags) ? item.tags : []),
-    item?.category_l1,
-    item?.category_l2,
-    item?.letdove_code,
-    item?.series
-  ]
-    .filter(Boolean)
-    .join(" ");
+function getItemImages(item) {
+  if (Array.isArray(item?.images)) {
+    return item.images;
+  }
+
+  return item?.cover ? [item.cover] : [];
 }
 
-function isPersistableImageUrl(value) {
-  return typeof value === "string" && /^https?:\/\/.+/i.test(value) && !value.startsWith("data:") && !value.startsWith("blob:");
+function isPersistableImageKey(value) {
+  return typeof value === "string" && /^letdove\/[a-z0-9_-]+\/[^/]+$/i.test(value);
 }
 
-function normalizeImageUrl(value) {
+function normalizeStoredKey(value, code = "") {
   if (typeof value !== "string") {
     return "";
   }
 
-  return value
-    .replace(/^https:\/\/pub-[a-z0-9]+\.r2\.dev\//i, "https://img.letdove.uk/")
-    .replace(/^https:\/\/letdove\.uk\/letdove\//i, "https://img.letdove.uk/letdove/");
+  const cleaned = value.trim();
+
+  if (cleaned.startsWith("letdove/")) {
+    return cleaned;
+  }
+
+  return "";
 }
 
 function json(payload, status = 200) {

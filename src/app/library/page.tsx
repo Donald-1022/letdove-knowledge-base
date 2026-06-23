@@ -1,10 +1,5 @@
 import { LexiconExplorer } from "@/components/lexicon-explorer";
-import {
-  getCategoryL1Options,
-  getCategoryL2Options,
-  getLetDoveItems,
-  getSeriesOptions
-} from "@/lib/letdove";
+import { getLetDoveItems } from "@/lib/letdove";
 
 export const metadata = {
   title: "letdove knowledge base",
@@ -15,11 +10,6 @@ export default function LibraryPage() {
   const items = getLetDoveItems();
 
   return (
-    <LexiconExplorer
-      categoryL1Options={getCategoryL1Options()}
-      categoryL2Options={getCategoryL2Options()}
-      items={items}
-      series={getSeriesOptions()}
-    />
+    <LexiconExplorer items={items} />
   );
 }
