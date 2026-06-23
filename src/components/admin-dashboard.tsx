@@ -18,13 +18,14 @@ import {
   UploadCloud,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import seedItems from "@/data/letdove.json";
 import type { LetDoveItem } from "@/lib/letdove";
 
 const authKey = "letdove-admin-token";
 const storageKey = "letdove-admin-json";
 const maxUploadAttempts = 3;
+const dataSourcePath = "/api/items/list";
 
 type AdminStatus = "published" | "draft";
 type AdminView = "upload" | "notes" | "drafts";
@@ -42,6 +43,14 @@ type LoginResponse =
 type UploadResponse =
   | { environment?: "local" | "production"; key?: string; size?: number; success: true; url?: string; urls: string[] }
   | { environment?: "local" | "production"; error: string; success: false; urls: string[] };
+
+type ItemsListResponse =
+  | { count?: number; environment?: "local" | "production"; items: LetDoveItem[]; key?: string; source?: string; success: true; updatedAt?: string | null }
+  | { environment?: "local" | "production"; error: string; items: LetDoveItem[]; success: false };
+
+type ItemsSaveResponse =
+  | { count: number; environment?: "local" | "production"; key: string; success: true; updatedAt: string }
+  | { environment?: "local" | "production"; error: string; success: false };
 
 type MediaDraft = {
   aspectRatio?: number;
@@ -80,6 +89,12 @@ export function AdminDashboard() {
   const [previewDraft, setPreviewDraft] = useState<MediaDraft | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [noteDragIndex, setNoteDragIndex] = useState<number | null>(null);
+  const [dataEnvironment, setDataEnvironment] = useState<"local" | "production" | "unknown">("unknown");
+  const [dataStatus, setDataStatus] = useState<"loading" | "local-backup" | "unsaved" | "saving" | "saved" | "error">("loading");
+  const [lastLoadedAt, setLastLoadedAt] = useState("");
+  const [lastSavedAt, setLastSavedAt] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const saveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   useEffect(() => {
     const storedToken = window.localStorage.getItem(authKey) ?? "";
@@ -91,8 +106,16 @@ export function AdminDashboard() {
 
     setItems(nextItems);
     setSelectedId(nextItems[0]?.id ?? "");
+    setDataStatus(stored ? "local-backup" : "loading");
+
+    if (storedToken) {
+      void loadItemsFromServer(storedToken);
+    }
 
     return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
       mediaDrafts.forEach((draft) => {
         if (draft.source === "local") {
           URL.revokeObjectURL(draft.previewUrl);
@@ -184,6 +207,7 @@ export function AdminDashboard() {
     window.localStorage.setItem(authKey, payload.token);
     setToken(payload.token);
     setAuthenticated(true);
+    void loadItemsFromServer(payload.token);
   }
 
   function logout() {
@@ -192,14 +216,113 @@ export function AdminDashboard() {
     setToken("");
   }
 
-  function persist(nextItems: AdminItem[], message = "Saved JSON draft.") {
+  function persist(nextItems: AdminItem[], message = "Saved JSON draft.", saveMode: "debounced" | "immediate" = "debounced") {
     const normalized = normalizeItems(nextItems);
     setItems(normalized);
     window.localStorage.setItem(storageKey, JSON.stringify(normalized, null, 2));
     setNotice(message);
+    setDataStatus("unsaved");
+    setSaveError("");
+
+    if (saveMode === "immediate") {
+      void saveItemsToServer(normalized);
+      return;
+    }
+
+    scheduleSave(normalized);
   }
 
-  function updateSelected(patch: Partial<AdminItem>) {
+  async function loadItemsFromServer(authToken = token) {
+    setDataStatus("loading");
+    setSaveError("");
+
+    try {
+      const response = await fetch(dataSourcePath, {
+        headers: authToken ? { authorization: `Bearer ${authToken}` } : {}
+      });
+      const payload = await response.json().catch(() => null) as ItemsListResponse | null;
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload && "error" in payload ? payload.error : `Load failed with HTTP ${response.status}`);
+      }
+
+      setDataEnvironment(payload.environment ?? "production");
+      setLastLoadedAt(new Date().toLocaleString());
+
+      if (payload.items.length) {
+        const normalized = normalizeItems(payload.items);
+        setItems(normalized);
+        window.localStorage.setItem(storageKey, JSON.stringify(normalized, null, 2));
+        setSelectedId((current) => current && normalized.some((item) => item.id === current) ? current : normalized[0]?.id ?? "");
+        setNotice(`Loaded ${normalized.length} cards from R2 metadata.`);
+        setDataStatus("saved");
+        return;
+      }
+
+      setDataStatus("local-backup");
+      setNotice("R2 metadata is empty. Using bundled seed/local backup until you save.");
+    } catch (error) {
+      setDataStatus("error");
+      setSaveError(error instanceof Error ? error.message : "Failed to load R2 metadata.");
+      setNotice("Could not load R2 metadata. Using local backup.");
+    }
+  }
+
+  function scheduleSave(nextItems: AdminItem[]) {
+    if (!token) {
+      return;
+    }
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = window.setTimeout(() => {
+      void saveItemsToServer(nextItems);
+    }, 800);
+  }
+
+  async function saveItemsToServer(nextItems: AdminItem[] = items) {
+    if (!token) {
+      setDataStatus("local-backup");
+      return;
+    }
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    setDataStatus("saving");
+    setSaveError("");
+
+    try {
+      const response = await fetch("/api/items/save", {
+        body: JSON.stringify({ items: nextItems }),
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = await response.json().catch(() => null) as ItemsSaveResponse | null;
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload && "error" in payload ? payload.error : `Save failed with HTTP ${response.status}`);
+      }
+
+      setDataEnvironment(payload.environment ?? "production");
+      setLastSavedAt(new Date(payload.updatedAt).toLocaleString());
+      setDataStatus("saved");
+      setNotice(`Saved ${payload.count} cards to R2 metadata.`);
+    } catch (error) {
+      setDataStatus("error");
+      setSaveError(error instanceof Error ? error.message : "Failed to save R2 metadata.");
+      setNotice("Save failed. Local backup is still preserved in this browser.");
+    }
+  }
+
+  function updateSelected(patch: Partial<AdminItem>, saveMode: "debounced" | "immediate" = "debounced") {
     if (!selectedItem) {
       return;
     }
@@ -215,20 +338,21 @@ export function AdminDashboard() {
         })
         : item
       ),
-      "Draft updated in browser storage."
+      "Draft updated. Syncing metadata to R2.",
+      saveMode
     );
   }
 
   function createNew() {
     const nextItem = createItem(items.length + 1);
     clearLocalMedia();
-    persist([nextItem, ...items], "Created new draft card.");
+    persist([nextItem, ...items], "Created new draft card.", "immediate");
     setSelectedId(nextItem.id);
   }
 
   function saveDraft() {
-    updateSelected({ status: "draft", visible: true });
-    setNotice("Draft saved. Export JSON to publish this data file.");
+    updateSelected({ status: "draft", visible: true }, "immediate");
+    setNotice("Draft saved to R2 metadata.");
   }
 
   function publish() {
@@ -239,8 +363,8 @@ export function AdminDashboard() {
       return;
     }
 
-    updateSelected({ status: "published", visible: true });
-    setNotice("Card marked as published. Export JSON to update src/data/letdove.json.");
+    updateSelected({ status: "published", visible: true }, "immediate");
+    setNotice("Card marked as published and saved to R2 metadata.");
   }
 
   function deleteSelected() {
@@ -250,7 +374,7 @@ export function AdminDashboard() {
 
     clearLocalMedia();
     const nextItems = items.filter((item) => item.id !== selectedItem.id);
-    persist(nextItems, `Deleted ${selectedItem.letdove_code}.`);
+    persist(nextItems, `Deleted ${selectedItem.letdove_code}.`, "immediate");
     setSelectedId(nextItems[0]?.id ?? "");
   }
 
@@ -272,7 +396,7 @@ export function AdminDashboard() {
     try {
       const imported = normalizeItems(JSON.parse(await file.text()) as LetDoveItem[]);
       clearLocalMedia();
-      persist(imported, "Imported JSON draft.");
+      persist(imported, "Imported JSON and syncing to R2 metadata.", "immediate");
       setSelectedId(imported[0]?.id ?? "");
     } catch {
       setNotice("Import failed. Please choose a valid LetDove JSON file.");
@@ -297,7 +421,7 @@ export function AdminDashboard() {
         status: data.publish_status === "draft" ? "draft" : selectedItem.status,
         tags: Array.isArray(data.hashtags) ? data.hashtags.map((tag) => tag.replace(/^#/, "")) : selectedItem.tags,
         title: data.post_title ?? selectedItem.title
-      });
+      }, "immediate");
       setNotice("publish.json imported into the current note fields.");
     } catch {
       setNotice("publish.json import failed. Please choose a valid publish JSON file.");
@@ -439,9 +563,10 @@ export function AdminDashboard() {
       }));
 
       window.localStorage.setItem(storageKey, JSON.stringify(nextItems, null, 2));
+      void saveItemsToServer(nextItems);
       return nextItems;
     });
-    setNotice("Uploaded image URL saved to media.gallery.");
+    setNotice("Uploaded image URL saved to R2 metadata.");
   }
 
   async function uploadFile(file: File, item: AdminItem, startIndex: number, authToken: string) {
@@ -634,6 +759,8 @@ export function AdminDashboard() {
           <button data-active={activeView === "drafts"} onClick={() => setActiveView("drafts")} type="button"><Save size={16} />草稿箱<span data-dot>{draftCount}</span></button>
         </nav>
         <div className="admin-xhs-sidebar-tools">
+          <button onClick={() => loadItemsFromServer()} type="button"><Download size={15} />从 R2 重新加载</button>
+          <button onClick={() => saveItemsToServer()} type="button"><UploadCloud size={15} />同步到 R2</button>
           <button onClick={() => downloadJson("letdove.json", items)} type="button"><Download size={15} />导出 JSON</button>
           <label><FileJson size={15} />导入 JSON<input accept="application/json" hidden onChange={(event) => importJson(event.target.files?.[0])} type="file" /></label>
           <button onClick={logout} type="button"><LogOut size={15} />退出登录</button>
@@ -646,6 +773,14 @@ export function AdminDashboard() {
             <button data-active={activeView === "upload"} onClick={() => setActiveView("upload")} type="button">上传图文</button>
             <button data-active={activeView === "notes"} onClick={() => setActiveView("notes")} type="button">笔记管理</button>
             <button data-active={activeView === "drafts"} onClick={() => setActiveView("drafts")} type="button">草稿箱({draftCount})</button>
+          </div>
+          <div className="admin-xhs-data-status" data-state={dataStatus}>
+            <strong>{getDataStatusLabel(dataStatus)}</strong>
+            <span>Source {dataSourcePath}</span>
+            <span>Env {dataEnvironment}</span>
+            {lastLoadedAt && <span>Loaded {lastLoadedAt}</span>}
+            {lastSavedAt && <span>Saved {lastSavedAt}</span>}
+            {saveError && <span>{saveError}</span>}
           </div>
         </header>
 
@@ -983,6 +1118,30 @@ function formatBytes(size: number) {
 
 function isPersistableImageUrl(value: string) {
   return /^https?:\/\/.+/i.test(value) && !value.startsWith("data:") && !value.startsWith("blob:");
+}
+
+function getDataStatusLabel(status: "loading" | "local-backup" | "unsaved" | "saving" | "saved" | "error") {
+  if (status === "loading") {
+    return "Loading data";
+  }
+
+  if (status === "local-backup") {
+    return "Local backup";
+  }
+
+  if (status === "unsaved") {
+    return "Unsaved changes";
+  }
+
+  if (status === "saving") {
+    return "Saving...";
+  }
+
+  if (status === "error") {
+    return "Sync error";
+  }
+
+  return "Saved to R2";
 }
 
 function wait(ms: number) {

@@ -23,6 +23,10 @@ type LexiconExplorerProps = {
 
 const ALL = "all";
 
+type ItemsListResponse =
+  | { environment?: "local" | "production"; items: LetDoveItem[]; success: true; updatedAt?: string | null }
+  | { error: string; items: LetDoveItem[]; success: false };
+
 export function LexiconExplorer({
   items,
   categoryL1Options,
@@ -35,23 +39,38 @@ export function LexiconExplorer({
   const [selectedSeries, setSelectedSeries] = useState(ALL);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [liveItems, setLiveItems] = useState(items);
+  const [dataNotice, setDataNotice] = useState("");
+
+  const liveCategoryL1Options = useMemo(
+    () => Array.from(new Set(liveItems.map((item) => item.category_l1))).sort(),
+    [liveItems]
+  );
+  const liveCategoryL2Options = useMemo(
+    () => Array.from(new Set(liveItems.map((item) => item.category_l2))).sort(),
+    [liveItems]
+  );
+  const liveSeries = useMemo(
+    () => Array.from(new Set(liveItems.map((item) => item.series))).sort(),
+    [liveItems]
+  );
 
   const l2Options = useMemo(() => {
     if (categoryL1 === ALL) {
-      return categoryL2Options;
+      return liveCategoryL2Options.length ? liveCategoryL2Options : categoryL2Options;
     }
 
     return Array.from(
       new Set(
-        items
+        liveItems
           .filter((item) => item.category_l1 === categoryL1)
           .map((item) => item.category_l2)
       )
     ).sort();
-  }, [categoryL1, categoryL2Options, items]);
+  }, [categoryL1, categoryL2Options, liveCategoryL2Options, liveItems]);
 
   const visibleItems = useMemo(() => {
-    const categoryFiltered = items.filter((item) => {
+    const categoryFiltered = liveItems.filter((item) => {
       const l1Match = categoryL1 === ALL || item.category_l1 === categoryL1;
       const l2Match = categoryL2 === ALL || item.category_l2 === categoryL2;
       const seriesMatch = selectedSeries === ALL || item.series === selectedSeries;
@@ -61,21 +80,21 @@ export function LexiconExplorer({
     });
 
     return searchLetDoveItems(query, categoryFiltered);
-  }, [categoryL1, categoryL2, items, query, selectedSeries]);
+  }, [categoryL1, categoryL2, liveItems, query, selectedSeries]);
 
   const selectedItem = useMemo(
-    () => items.find((item) => item.id === selectedId) ?? null,
-    [items, selectedId]
+    () => liveItems.find((item) => item.id === selectedId) ?? null,
+    [liveItems, selectedId]
   );
 
-  const modalItems = visibleItems.some((item) => item.id === selectedId) ? visibleItems : items;
+  const modalItems = visibleItems.some((item) => item.id === selectedId) ? visibleItems : liveItems;
   const selectedIndex = selectedItem
     ? modalItems.findIndex((item) => item.id === selectedItem.id)
     : -1;
 
   const allTags = useMemo(
-    () => Array.from(new Set(items.flatMap((item) => item.tags))).sort().slice(0, 12),
-    [items]
+    () => Array.from(new Set(liveItems.flatMap((item) => item.tags))).sort().slice(0, 12),
+    [liveItems]
   );
 
   useEffect(() => {
@@ -91,6 +110,34 @@ export function LexiconExplorer({
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("letdove-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadLiveItems() {
+      try {
+        const response = await fetch("/api/items/list", { cache: "no-store" });
+        const payload = await response.json().catch(() => null) as ItemsListResponse | null;
+
+        if (!active || !response.ok || !payload?.success || !payload.items.length) {
+          return;
+        }
+
+        setLiveItems(payload.items);
+        setDataNotice(`Live R2 metadata loaded${payload.environment ? ` · ${payload.environment}` : ""}`);
+      } catch {
+        if (active) {
+          setDataNotice("Using bundled fallback data");
+        }
+      }
+    }
+
+    void loadLiveItems();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (categoryL2 !== ALL && !l2Options.includes(categoryL2)) {
@@ -182,15 +229,15 @@ export function LexiconExplorer({
 
           <div className="metric-strip" aria-label="Library statistics">
             <div className="metric">
-              <span className="metric-value">{items.length}</span>
+              <span className="metric-value">{liveItems.length}</span>
               <span className="metric-label">cards</span>
             </div>
             <div className="metric">
-              <span className="metric-value">{categoryL1Options.length}</span>
+              <span className="metric-value">{liveCategoryL1Options.length || categoryL1Options.length}</span>
               <span className="metric-label">L1</span>
             </div>
             <div className="metric">
-              <span className="metric-value">{categoryL2Options.length}</span>
+              <span className="metric-value">{liveCategoryL2Options.length || categoryL2Options.length}</span>
               <span className="metric-label">L2</span>
             </div>
           </div>
@@ -217,7 +264,7 @@ export function LexiconExplorer({
             value={categoryL1}
           >
             <option value={ALL}>All L1</option>
-            {categoryL1Options.map((option) => (
+            {(liveCategoryL1Options.length ? liveCategoryL1Options : categoryL1Options).map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
@@ -249,7 +296,7 @@ export function LexiconExplorer({
             value={selectedSeries}
           >
             <option value={ALL}>All series</option>
-            {series.map((option) => (
+            {(liveSeries.length ? liveSeries : series).map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
@@ -278,6 +325,7 @@ export function LexiconExplorer({
       <div className="grid-meta">
         <span>
           Showing <code>{visibleItems.length}</code> of <code>{items.length}</code>
+          {dataNotice && <span> · {dataNotice}</span>}
         </span>
         {(query || categoryL1 !== ALL || categoryL2 !== ALL || selectedSeries !== ALL) && (
           <button className="chip" onClick={resetFilters} type="button">

@@ -42,7 +42,7 @@ export type LetDoveItem = {
 };
 
 const letDoveItems = items as LetDoveItem[];
-const fuse = new Fuse(letDoveItems, {
+const fuseOptions = {
   threshold: 0.34,
   ignoreLocation: true,
   keys: [
@@ -52,7 +52,7 @@ const fuse = new Fuse(letDoveItems, {
     { name: "letdove_code", weight: 0.2 },
     { name: "search_index", weight: 0.12 }
   ]
-});
+};
 
 export function getLetDoveItems() {
   return letDoveItems;
@@ -108,7 +108,7 @@ export function searchLetDoveItems(query: string, source: LetDoveItem[]) {
   }
 
   const sourceIds = new Set(source.map((item) => item.id));
-  const fuzzyResults = fuse.search(normalized).map((result) => result.item);
+  const fuzzyResults = new Fuse(source, fuseOptions).search(normalized).map((result) => result.item);
   const matchedIds = new Set<string>();
   const results: LetDoveItem[] = [];
 

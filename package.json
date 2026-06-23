@@ -11,6 +11,7 @@
     "deploy:cloudflare": "wrangler pages deploy out",
     "verify:admin": "node scripts/verify-admin.mjs",
     "verify:browser": "node scripts/verify-browser.mjs",
+    "verify:items": "node scripts/verify-items.mjs",
     "verify:upload": "node scripts/verify-upload.mjs"
   },
   "dependencies": {

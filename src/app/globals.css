@@ -2443,6 +2443,7 @@ a {
 .admin-xhs-topbar {
   align-items: center;
   display: flex;
+  gap: 14px;
   justify-content: space-between;
 }
 
@@ -2475,6 +2476,40 @@ a {
   color: #333;
   font-size: 13px;
   font-weight: 700;
+}
+
+.admin-xhs-data-status {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 14px;
+  color: #777;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 7px;
+  justify-content: flex-end;
+  padding: 8px 10px;
+}
+
+.admin-xhs-data-status strong {
+  background: #f1f8f5;
+  border-radius: 999px;
+  color: #20735a;
+  padding: 5px 9px;
+}
+
+.admin-xhs-data-status[data-state="loading"] strong,
+.admin-xhs-data-status[data-state="saving"] strong,
+.admin-xhs-data-status[data-state="unsaved"] strong {
+  background: #fff6e8;
+  color: #9b5b00;
+}
+
+.admin-xhs-data-status[data-state="error"] strong,
+.admin-xhs-data-status[data-state="local-backup"] strong {
+  background: #fff1f3;
+  color: #ff2442;
 }
 
 .admin-xhs-compose {

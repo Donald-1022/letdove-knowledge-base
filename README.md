@@ -35,10 +35,10 @@ The admin editor is protected by a localStorage login gate.
 
 ```text
 username: admin
-password: admin
+password: adminissimon
 ```
 
-After login, `/admin` renders a three-panel CMS: content list, editor, and live 4:5 card preview. It saves JSON drafts to localStorage, supports JSON import/export, batch image uploads to R2, drag image reorder, image deletion, cover selection, create/update/delete, display ordering, and published/draft status.
+After login, `/admin` renders a three-panel CMS: content list, editor, and live 4:5 card preview. It loads and saves card metadata through Cloudflare Pages Functions backed by R2, keeps localStorage only as a browser backup, supports JSON import/export, batch image uploads to R2, drag image reorder, image deletion, create/update/delete, display ordering, and published/draft status.
 
 Admin upload writes are atomic in the browser CMS layer:
 
@@ -49,10 +49,30 @@ select image file
   -> append URL to media.gallery
   -> update media.cover
   -> regenerate search_index
-  -> persist JSON draft
+  -> save unified metadata to R2 JSON
 ```
 
-If upload fails, the JSON draft is rolled back and no base64, blob URL, or preview URL is saved.
+If upload fails, the metadata write is blocked and no base64, blob URL, or preview URL is saved.
+
+The canonical metadata object is stored in R2 at:
+
+```text
+letdove/data/items.json
+```
+
+Admin and public pages read the same object through:
+
+```text
+GET /api/items/list
+```
+
+Admin writes the normalized item array through:
+
+```text
+POST /api/items/save
+```
+
+The bundled `src/data/letdove.json` remains a static first-load fallback for static export and for an empty R2 metadata object. It is no longer the admin save target.
 
 ## Build
 
@@ -60,7 +80,7 @@ If upload fails, the JSON draft is rolled back and no base64, blob URL, or previ
 npm run build
 ```
 
-The static frontend is exported to `out/`. The upload API is a Cloudflare Pages Function in `functions/api/images/upload.js`.
+The static frontend is exported to `out/`. The upload API is a Cloudflare Pages Function in `functions/api/images/upload.js`. Metadata APIs are Cloudflare Pages Functions in `functions/api/items/list.js` and `functions/api/items/save.js`.
 
 For local admin uploads, run the Cloudflare Pages preview server, not the plain Next.js dev server:
 
