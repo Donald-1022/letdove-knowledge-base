@@ -94,7 +94,7 @@ export function AdminDashboard() {
   const [lastLoadedAt, setLastLoadedAt] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState("");
   const [saveError, setSaveError] = useState("");
-  const saveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const storedToken = window.localStorage.getItem(authKey) ?? "";
