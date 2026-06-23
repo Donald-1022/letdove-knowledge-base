@@ -7,7 +7,7 @@
     "dev": "npm run build && npm run preview",
     "dev:next": "next dev",
     "build": "next build",
-    "preview": "wrangler pages dev out --r2=LETDOVE_IMAGES --binding R2_PUBLIC_BASE_URL=https://letdove.uk",
+    "preview": "wrangler pages dev out --r2=LETDOVE_IMAGES --binding R2_PUBLIC_BASE_URL=https://img.letdove.uk",
     "deploy:cloudflare": "wrangler pages deploy out",
     "verify:admin": "node scripts/verify-admin.mjs",
     "verify:browser": "node scripts/verify-browser.mjs",

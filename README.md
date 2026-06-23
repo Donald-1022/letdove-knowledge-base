@@ -78,7 +78,7 @@ Use Cloudflare Pages for production:
 - Output directory: `out`
 - Functions directory: `functions`
 - R2 binding: `LETDOVE_IMAGES -> letdove-images`
-- Wrangler vars: `ADMIN_USER`, `ADMIN_PASS`, `R2_PUBLIC_BASE_URL=https://letdove.uk`
+- Wrangler vars: `ADMIN_USER`, `ADMIN_PASS`, `R2_PUBLIC_BASE_URL=https://img.letdove.uk`
 - Optional secret: `ADMIN_SESSION_SECRET`
 
 The upload endpoint is served by Cloudflare Pages Functions at `/api/images/upload`.
@@ -89,7 +89,7 @@ The admin login endpoint is served by Cloudflare Pages Functions at `/api/admin/
 [vars]
 ADMIN_USER = "admin"
 ADMIN_PASS = "adminissimon"
-R2_PUBLIC_BASE_URL = "https://letdove.uk"
+R2_PUBLIC_BASE_URL = "https://img.letdove.uk"
 ```
 
 Optionally set a separate session signing secret with `wrangler pages secret put ADMIN_SESSION_SECRET`.
@@ -121,31 +121,45 @@ Cloudflare configuration:
 - R2 binding name: `LETDOVE_IMAGES`
 - Environment variable: `R2_PUBLIC_BASE_URL`
 
-`R2_PUBLIC_BASE_URL` should be `https://letdove.uk`. The Pages Function reads R2 through `env.LETDOVE_IMAGES` and uploads with `env.LETDOVE_IMAGES.put()`. The admin uploader refuses to save base64 image data; failed uploads leave the existing media unchanged.
+`R2_PUBLIC_BASE_URL` should be `https://img.letdove.uk`. The Pages Function reads R2 through `env.LETDOVE_IMAGES` and uploads with `env.LETDOVE_IMAGES.put()`. The admin uploader refuses to save base64 image data; failed uploads leave the existing media unchanged.
 
 Single-file upload success response:
 
 ```json
 {
+  "environment": "production",
   "success": true,
-  "url": "https://letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
-  "key": "letdove/prompt/p01_q01/image_001.jpg"
+  "url": "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
+  "urls": ["https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg"],
+  "key": "letdove/prompt/p01_q01/image_001.jpg",
+  "size": 182341
 }
 ```
 
-Multi-file uploads return:
+Failed uploads always return JSON and never report success unless R2 write succeeds:
 
 ```json
 {
-  "success": true,
-  "images": [
-    {
-      "url": "https://letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
-      "key": "letdove/prompt/p01_q01/image_001.jpg"
-    }
-  ]
+  "environment": "production",
+  "success": false,
+  "urls": [],
+  "error": "R2 write failed: ..."
 }
 ```
+
+Do not use a public URL fetch as the upload success condition. The upload function validates `bucket.put()` and `bucket.head(key)` only. CDN/domain availability can lag behind R2 writes and should be checked separately when debugging.
+
+Local `wrangler pages dev --r2=LETDOVE_IMAGES` uses Wrangler's local R2 simulation by default. In that mode `R2 WRITE SUCCESS` and `R2 HEAD SUCCESS` mean the object exists in local dev storage, not in the production `letdove-images` bucket. The function response includes `"environment": "local"` for localhost requests, and the returned `https://img.letdove.uk/...` URL can still 404 until the same key is uploaded by the production Pages Function.
+
+Production upload test flow:
+
+1. Open `https://letdove.uk/admin`.
+2. Upload one image from the admin panel.
+3. Confirm the response shows `"environment": "production"`.
+4. In Cloudflare R2, open bucket `letdove-images` and confirm the returned `key` exists under Objects.
+5. Open the returned `https://img.letdove.uk/...` URL in the browser.
+
+If you need to verify production image URLs, test through the deployed Pages site. Local Wrangler dev should be treated as a functional API/upload simulation unless you intentionally configure Wrangler to use a remote R2 binding.
 
 `wrangler.toml` includes the OpenNext worker entry, static asset binding, R2 binding, and public R2 URL variable.
 
@@ -166,10 +180,10 @@ Required fields for each item:
   "title": "Product Hero Prompt",
   "description": "Short searchable summary",
   "media": {
-    "cover": "https://letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
+    "cover": "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
     "gallery": [
-      "https://letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
-      "https://letdove.uk/letdove/prompt/p01_q01/image_002.jpg"
+      "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
+      "https://img.letdove.uk/letdove/prompt/p01_q01/image_002.jpg"
     ]
   },
   "category_l1": "prompt",

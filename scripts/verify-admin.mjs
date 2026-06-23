@@ -17,34 +17,33 @@ page.on("console", (message) => {
 
 await page.goto(`${baseUrl}/admin/`, { waitUntil: "networkidle" });
 await page.evaluate(() => {
-  window.localStorage.removeItem("letdove-admin-auth");
+  window.localStorage.removeItem("letdove-admin-token");
 });
 await page.reload({ waitUntil: "networkidle" });
 
 const result = {
-  loginTitle: await page.locator(".admin-v2-login-card h1").innerText(),
-  loginCardCount: await page.locator(".admin-v2-login-card").count()
+  loginTitle: await page.locator(".admin-xhs-login-card h1").innerText(),
+  loginCardCount: await page.locator(".admin-xhs-login-card").count()
 };
 
 await page.locator('input[name="username"]').fill("admin");
 await page.locator('input[name="password"]').fill("wrong");
 await page.getByRole("button", { name: "Login" }).click();
-result.errorVisible = await page.locator(".admin-v2-login-card p").innerText();
+result.errorVisible = await page.locator(".admin-xhs-login-card p").innerText();
 
-await page.locator('input[name="password"]').fill("admin");
+await page.locator('input[name="password"]').fill("adminissimon");
 await page.getByRole("button", { name: "Login" }).click();
-await page.waitForSelector(".admin-v2-grid");
+await page.waitForSelector(".admin-xhs-shell");
 
-result.topbarTitle = await page.locator(".admin-v2-topbar h1").innerText();
-result.leftPanel = await page.locator(".admin-v2-left").count();
-result.centerPanel = await page.locator(".admin-v2-center").count();
-result.rightPanel = await page.locator(".admin-v2-right").count();
-result.listItems = await page.locator(".admin-v2-list-item").count();
-result.editorFields = await page.locator(".admin-v2-field").count();
-result.previewCards = await page.locator(".admin-v2-preview-card").count();
+result.brandTitle = await page.locator(".admin-xhs-brand span").innerText();
+result.sidebar = await page.locator(".admin-xhs-sidebar").count();
+result.composePanel = await page.locator(".admin-xhs-compose").count();
+result.editorPanel = await page.locator(".admin-xhs-editor").count();
+result.mediaCards = await page.locator(".admin-xhs-media-card").count();
+result.editorFields = await page.locator(".admin-v3-field").count();
 result.uploadInputs = await page.locator('input[type="file"][accept="image/*"]').count();
-result.exportButton = await page.getByRole("button", { name: "Export JSON" }).count();
-result.publishButton = await page.getByRole("button", { name: "Publish" }).count();
+result.exportButton = await page.getByRole("button", { name: "导出 JSON" }).count();
+result.publishButton = await page.getByRole("button", { name: "发布" }).count();
 result.consoleMessages = messages;
 
 await browser.close();

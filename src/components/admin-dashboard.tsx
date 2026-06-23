@@ -27,6 +27,7 @@ const storageKey = "letdove-admin-json";
 const maxUploadAttempts = 3;
 
 type AdminStatus = "published" | "draft";
+type AdminView = "upload" | "notes" | "drafts";
 type MediaStatus = "local" | "uploading" | "uploaded" | "error";
 type AdminItem = LetDoveItem & {
   display_order: number;
@@ -39,8 +40,8 @@ type LoginResponse =
   | { success: false; error: string };
 
 type UploadResponse =
-  | { success: true; key: string; url: string }
-  | { success: false; error: string };
+  | { environment?: "local" | "production"; key?: string; size?: number; success: true; url?: string; urls: string[] }
+  | { environment?: "local" | "production"; error: string; success: false; urls: string[] };
 
 type MediaDraft = {
   aspectRatio?: number;
@@ -55,6 +56,8 @@ type MediaDraft = {
   size: number;
   source: "local" | "r2";
   status: MediaStatus;
+  uploadEnvironment?: "local" | "production";
+  uploadedSize?: number;
 };
 
 type UploadFailureKind = "network" | "json" | "server" | "r2" | "invalid-response" | "invalid-file";
@@ -71,10 +74,12 @@ export function AdminDashboard() {
   const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | AdminStatus>("all");
+  const [activeView, setActiveView] = useState<AdminView>("upload");
   const [notice, setNotice] = useState("");
   const [mediaDrafts, setMediaDrafts] = useState<MediaDraft[]>([]);
   const [previewDraft, setPreviewDraft] = useState<MediaDraft | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [noteDragIndex, setNoteDragIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const storedToken = window.localStorage.getItem(authKey) ?? "";
@@ -123,6 +128,13 @@ export function AdminDashboard() {
   const selectedItem = useMemo(
     () => items.find((item) => item.id === selectedId) ?? filteredItems[0] ?? items[0],
     [filteredItems, items, selectedId]
+  );
+
+  const draftCount = useMemo(() => items.filter((item) => item.status === "draft").length, [items]);
+  const publishedCount = useMemo(() => items.filter((item) => item.status === "published").length, [items]);
+  const visibleManagerItems = useMemo(
+    () => activeView === "drafts" ? sortedItems.filter((item) => item.status === "draft") : filteredItems,
+    [activeView, filteredItems, sortedItems]
   );
 
   const allMedia = useMemo(() => {
@@ -267,6 +279,31 @@ export function AdminDashboard() {
     }
   }
 
+  async function importPublishJson(file: File | undefined) {
+    if (!file || !selectedItem) {
+      return;
+    }
+
+    try {
+      const data = JSON.parse(await file.text()) as {
+        caption?: string;
+        hashtags?: string[];
+        post_title?: string;
+        publish_status?: string;
+      };
+
+      updateSelected({
+        description: data.caption ?? selectedItem.description,
+        status: data.publish_status === "draft" ? "draft" : selectedItem.status,
+        tags: Array.isArray(data.hashtags) ? data.hashtags.map((tag) => tag.replace(/^#/, "")) : selectedItem.tags,
+        title: data.post_title ?? selectedItem.title
+      });
+      setNotice("publish.json imported into the current note fields.");
+    } catch {
+      setNotice("publish.json import failed. Please choose a valid publish JSON file.");
+    }
+  }
+
   async function stageFiles(files: File[]) {
     const staged = await Promise.all(Array.from(files).map(createMediaDraft));
     const accepted = staged.filter((draft) => draft.status !== "error");
@@ -354,9 +391,20 @@ export function AdminDashboard() {
       const result = await uploadFile(draft.file, item, item.media.gallery.length + mediaDrafts.filter((entry) => entry.status === "uploaded").length + 1, token);
 
       if (result.ok) {
-        markDraft(draft.id, { key: result.key, progress: 100, publicUrl: result.url, status: "uploaded" });
+        markDraft(draft.id, {
+          key: result.key,
+          progress: 100,
+          publicUrl: result.url,
+          status: "uploaded",
+          uploadEnvironment: result.environment,
+          uploadedSize: result.size
+        });
         appendUploadedUrl(item.id, result.url);
-        setNotice(`${draft.name} uploaded to R2.`);
+        setNotice(
+          result.environment === "local"
+            ? `${draft.name} uploaded to local Wrangler R2. The CDN URL may 404 until the same key is uploaded in production.`
+            : `${draft.name} uploaded to production R2. Key: ${result.key}`
+        );
         return;
       }
 
@@ -372,7 +420,8 @@ export function AdminDashboard() {
   }
 
   function appendUploadedUrl(itemId: string, url: string) {
-    const nextItems = items.map((item) => {
+    setItems((currentItems) => {
+      const nextItems = normalizeItems(currentItems.map((item) => {
       if (item.id !== itemId || item.media.gallery.includes(url)) {
         return item;
       }
@@ -387,9 +436,12 @@ export function AdminDashboard() {
         },
         updated_at: new Date().toISOString()
       });
-    });
+      }));
 
-    persist(nextItems, "Uploaded image URL saved to media.gallery.");
+      window.localStorage.setItem(storageKey, JSON.stringify(nextItems, null, 2));
+      return nextItems;
+    });
+    setNotice("Uploaded image URL saved to media.gallery.");
   }
 
   async function uploadFile(file: File, item: AdminItem, startIndex: number, authToken: string) {
@@ -397,18 +449,19 @@ export function AdminDashboard() {
       return { error: "Invalid file input.", ok: false as const };
     }
 
-    const formData = new FormData();
-    formData.append("file", file, file.name || `image_${Date.now()}`);
-    formData.append("category", item.category_l1 || "");
-    formData.append("letdove_code", item.letdove_code || "");
-    formData.append("start_index", String(startIndex));
-
     let response: Response;
 
     try {
       response = await fetch("/api/images/upload", {
-        body: formData,
-        headers: authToken ? { authorization: `Bearer ${authToken}` } : undefined,
+        body: file,
+        headers: {
+          ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
+          "content-type": file.type || "application/octet-stream",
+          "x-letdove-category": item.category_l1 || "",
+          "x-letdove-code": item.letdove_code || "",
+          "x-letdove-file-name": encodeURIComponent(file.name || `image_${Date.now()}`),
+          "x-letdove-start-index": String(startIndex)
+        },
         method: "POST"
       });
     } catch (error) {
@@ -431,11 +484,19 @@ export function AdminDashboard() {
       };
     }
 
-    if (!parsed.data.url || !isPersistableImageUrl(parsed.data.url)) {
-      return { error: "Upload succeeded but did not return a usable public URL.", ok: false as const };
+    const url = parsed.data.urls?.[0];
+
+    if (!url || !isPersistableImageUrl(url)) {
+      return { error: "Upload API did not return a confirmed public R2 URL.", ok: false as const };
     }
 
-    return { key: parsed.data.key, ok: true as const, url: parsed.data.url };
+    return {
+      environment: parsed.data.environment ?? "production",
+      key: parsed.data.key ?? getImageName(url),
+      ok: true as const,
+      size: parsed.data.size,
+      url
+    };
   }
 
   async function readUploadResponse(response: Response): Promise<ParsedUploadResponse> {
@@ -488,6 +549,26 @@ export function AdminDashboard() {
     setDragIndex(null);
   }
 
+  function reorderNote(targetIndex: number) {
+    if (noteDragIndex === null || noteDragIndex === targetIndex) {
+      setNoteDragIndex(null);
+      return;
+    }
+
+    const source = [...visibleManagerItems];
+    const [dragged] = source.splice(noteDragIndex, 1);
+    source.splice(targetIndex, 0, dragged);
+    const orderMap = new Map(source.map((item, index) => [item.id, index + 1]));
+    const nextItems = items.map((item) => normalizeItem({
+      ...item,
+      display_order: orderMap.get(item.id) ?? item.display_order,
+      order: orderMap.get(item.id) ?? item.order
+    }));
+
+    persist(nextItems, "Note order updated.");
+    setNoteDragIndex(null);
+  }
+
   function removeMedia(draft: MediaDraft) {
     if (draft.source === "r2" && selectedItem) {
       const gallery = selectedItem.media.gallery.filter((url) => url !== draft.publicUrl);
@@ -537,177 +618,170 @@ export function AdminDashboard() {
   }
 
   return (
-    <main className="admin-v3-shell">
-      <header className="admin-v3-topbar">
-        <div>
-          <span>LetDove CMS</span>
-          <h1>Content Manager</h1>
+    <main className="admin-xhs-shell">
+      <aside className="admin-xhs-sidebar">
+        <div className="admin-xhs-brand">
+          <span>LetDove</span>
+          <strong>创作服务平台</strong>
         </div>
-        <div className="admin-v3-actions">
-          <button onClick={createNew} type="button"><Plus size={15} />Create</button>
-          <button onClick={() => downloadJson("letdove.json", items)} type="button"><Download size={15} />Export</button>
-          <label><FileJson size={15} />Import<input accept="application/json" hidden onChange={(event) => importJson(event.target.files?.[0])} type="file" /></label>
-          <button onClick={logout} type="button"><LogOut size={15} />Logout</button>
+        <button className="admin-xhs-publish" onClick={() => {
+          createNew();
+          setActiveView("upload");
+        }} type="button"><Plus size={15} />发布笔记</button>
+        <nav className="admin-xhs-nav">
+          <button data-active={activeView === "upload"} onClick={() => setActiveView("upload")} type="button"><ImagePlus size={16} />上传图文</button>
+          <button data-active={activeView === "notes"} onClick={() => setActiveView("notes")} type="button"><FileJson size={16} />笔记管理<span>{publishedCount}</span></button>
+          <button data-active={activeView === "drafts"} onClick={() => setActiveView("drafts")} type="button"><Save size={16} />草稿箱<span data-dot>{draftCount}</span></button>
+        </nav>
+        <div className="admin-xhs-sidebar-tools">
+          <button onClick={() => downloadJson("letdove.json", items)} type="button"><Download size={15} />导出 JSON</button>
+          <label><FileJson size={15} />导入 JSON<input accept="application/json" hidden onChange={(event) => importJson(event.target.files?.[0])} type="file" /></label>
+          <button onClick={logout} type="button"><LogOut size={15} />退出登录</button>
         </div>
-      </header>
+      </aside>
 
-      <section className="admin-v3-grid">
-        <aside className="admin-v3-panel admin-v3-left">
-          <div className="admin-v3-panel-head">
-            <strong>Content list</strong>
-            <span>{filteredItems.length} / {items.length}</span>
+      <section className="admin-xhs-main">
+        <header className="admin-xhs-topbar">
+          <div className="admin-xhs-tabs">
+            <button data-active={activeView === "upload"} onClick={() => setActiveView("upload")} type="button">上传图文</button>
+            <button data-active={activeView === "notes"} onClick={() => setActiveView("notes")} type="button">笔记管理</button>
+            <button data-active={activeView === "drafts"} onClick={() => setActiveView("drafts")} type="button">草稿箱({draftCount})</button>
           </div>
-          <input
-            aria-label="Search cards"
-            className="admin-v3-search"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search code, title, tags..."
-            value={query}
-          />
-          <div className="admin-v3-tabs">
-            {(["all", "published", "draft"] as const).map((option) => (
-              <button data-active={filter === option} key={option} onClick={() => setFilter(option)} type="button">{option}</button>
-            ))}
-          </div>
-          <div className="admin-v3-list">
-            {filteredItems.map((item) => (
-              <button className="admin-v3-list-item" data-active={item.id === selectedItem?.id} key={item.id} onClick={() => {
-                clearLocalMedia();
-                setSelectedId(item.id);
-              }} type="button">
-                {item.media.cover ? <img alt="" src={item.media.cover} /> : <span>No image</span>}
-                <div>
-                  <code>{item.letdove_code}</code>
-                  <strong>{item.title}</strong>
-                  <small>{item.status} · order {item.display_order}</small>
-                </div>
-              </button>
-            ))}
-          </div>
-        </aside>
+        </header>
 
-        <section className="admin-v3-panel admin-v3-center">
-          {selectedItem ? (
-            <>
-              <div className="admin-v3-editor-title">
-                <div>
-                  <span>Metadata editor</span>
-                  <h2>{selectedItem.title}</h2>
-                </div>
-                <button className="admin-v3-danger" onClick={deleteSelected} type="button"><Trash2 size={15} />Delete</button>
-              </div>
-
-              <div className="admin-v3-form-grid">
-                <Field label="title" value={selectedItem.title} onChange={(value) => updateSelected({ title: value })} />
-                <Field label="letdove_code" value={selectedItem.letdove_code} onChange={(value) => updateSelected({ letdove_code: value })} />
-                <Field label="id" value={selectedItem.id} onChange={(value) => updateSelected({ id: value })} />
-                <Field label="series" value={selectedItem.series} onChange={(value) => updateSelected({ series: value })} />
-                <Field label="category_l1" value={selectedItem.category_l1} onChange={(value) => updateSelected({ category_l1: value })} />
-                <Field label="category_l2" value={selectedItem.category_l2} onChange={(value) => updateSelected({ category_l2: value })} />
-                <Field label="tags" value={selectedItem.tags.join(", ")} onChange={(value) => updateSelected({ tags: splitCsv(value) })} />
-                <label className="admin-v3-field">
-                  <span>status</span>
-                  <select value={selectedItem.status} onChange={(event) => updateSelected({ status: event.target.value as AdminStatus })}>
-                    <option value="published">published</option>
-                    <option value="draft">draft</option>
-                  </select>
-                </label>
-                <Field label="created_at" type="date" value={selectedItem.created_at} onChange={(value) => updateSelected({ created_at: value })} />
-                <Field label="display_order" type="number" value={String(selectedItem.display_order)} onChange={(value) => updateSelected({ display_order: Number(value) || 0, order: Number(value) || 0 })} />
-              </div>
-
-              <Field label="description" multiline value={selectedItem.description} onChange={(value) => updateSelected({ description: value })} />
-              <Field label="search_index" readOnly value={selectedItem.search_index} onChange={() => undefined} />
-
-              {notice && <p className="admin-v3-notice">{notice}</p>}
-
-              <div className="admin-v3-fixed-actions">
-                <button onClick={saveDraft} type="button"><Save size={15} />Save draft</button>
-                <button onClick={publish} type="button"><Send size={15} />Publish</button>
-              </div>
-            </>
-          ) : (
-            <div className="admin-v3-empty">Create a card to start editing.</div>
-          )}
-        </section>
-
-        <aside className="admin-v3-panel admin-v3-media">
-          <div className="admin-v3-panel-head">
-            <div>
-              <strong>Media editor</strong>
-              <span>{allMedia.length} image{allMedia.length === 1 ? "" : "s"} · {uploadSummary.uploaded}/{uploadSummary.total || 0} staged uploaded</span>
-            </div>
-            <label className="admin-v3-upload-button">
-              <ImagePlus size={16} />
-              Add
-              <input accept="image/*" hidden multiple onChange={(event) => {
-                const files = Array.from(event.currentTarget.files ?? []);
-                void stageFiles(files);
-                event.currentTarget.value = "";
-              }} type="file" />
-            </label>
-          </div>
-
-          <div className="admin-v3-media-stage">
-            {allMedia.length ? (
-              <div className="admin-v3-media-grid">
-                {allMedia.map((draft, index) => (
-                  <article
-                    className="admin-v3-media-tile"
-                    data-status={draft.status}
-                    draggable
-                    key={draft.id}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDragStart={() => setDragIndex(index)}
-                    onDrop={() => reorderMedia(index)}
-                  >
-                    <img alt="" src={draft.previewUrl} />
-                    <button aria-label="Preview image" className="admin-v3-media-preview" onClick={() => setPreviewDraft(draft)} type="button"><Maximize2 size={15} /></button>
-                    <span className="admin-v3-grip"><GripVertical size={15} /></span>
-                    <MediaStatusBadge draft={draft} />
-                    {draft.status === "uploading" && <progress max={100} value={draft.progress} />}
-                    <div className="admin-v3-media-meta">
+        {activeView === "upload" && selectedItem && (
+          <section className="admin-xhs-compose">
+            <div className="admin-xhs-upload-card">
+              {allMedia.length ? (
+                <div className="admin-xhs-media-grid">
+                  {allMedia.map((draft, index) => (
+                    <article
+                      className="admin-xhs-media-card"
+                      data-status={draft.status}
+                      draggable
+                      key={draft.id}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDragStart={() => setDragIndex(index)}
+                      onDrop={() => reorderMedia(index)}
+                    >
+                      <img alt="" src={draft.previewUrl} />
+                      <button aria-label="Preview image" className="admin-xhs-preview" onClick={() => setPreviewDraft(draft)} type="button"><Maximize2 size={15} /></button>
+                      <span className="admin-xhs-drag"><GripVertical size={15} /></span>
+                      <MediaStatusBadge draft={draft} />
+                      {draft.status === "uploading" && <progress max={100} value={draft.progress} />}
                       <strong>{draft.name}</strong>
                       <small>{draft.publicUrl ?? formatBytes(draft.size)}</small>
-                    </div>
-                    <div className="admin-v3-media-controls">
-                      <button disabled={!draft.publicUrl} onClick={() => setCover(draft.publicUrl)} type="button"><Eye size={14} />Cover</button>
-                      {draft.source === "local" && draft.status !== "uploaded" && (
-                        <button onClick={() => uploadStagedImages([draft.id])} type="button"><UploadCloud size={14} />Upload</button>
+                      {draft.uploadEnvironment && (
+                        <small>{draft.uploadEnvironment === "local" ? "Local Wrangler R2" : `Production R2${draft.uploadedSize ? ` · ${formatBytes(draft.uploadedSize)}` : ""}`}</small>
                       )}
-                      {draft.status === "error" && draft.file && (
-                        <button onClick={() => uploadStagedImages([draft.id])} type="button">Retry</button>
-                      )}
-                      <button onClick={() => removeMedia(draft)} type="button"><Trash2 size={14} /></button>
-                    </div>
-                    {draft.error && <p>{draft.error}</p>}
-                  </article>
-                ))}
+                      <div>
+                        {draft.source === "local" && draft.status !== "uploaded" && <button onClick={() => uploadStagedImages([draft.id])} type="button"><UploadCloud size={14} />上传</button>}
+                        <button onClick={() => removeMedia(draft)} type="button"><Trash2 size={14} /></button>
+                      </div>
+                      {draft.error && <p>{draft.error}</p>}
+                    </article>
+                  ))}
+                  <label className="admin-xhs-add-tile">
+                    <ImagePlus size={26} />
+                    <span>继续添加</span>
+                    <input accept="image/*" hidden multiple onChange={(event) => {
+                      const files = Array.from(event.currentTarget.files ?? []);
+                      void stageFiles(files);
+                      event.currentTarget.value = "";
+                    }} type="file" />
+                  </label>
+                </div>
+              ) : (
+                <label className="admin-xhs-dropzone">
+                  <ImagePlus size={68} />
+                  <strong>上传图片，或拖入图文素材</strong>
+                  <span>先本地预览，再上传至 R2；推荐 3:4 到 2:1，最大 15MB</span>
+                  <input accept="image/*" hidden multiple onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    void stageFiles(files);
+                    event.currentTarget.value = "";
+                  }} type="file" />
+                </label>
+              )}
+              <div className="admin-xhs-upload-footer">
+                <button disabled={!mediaDrafts.some((draft) => draft.status === "local" || draft.status === "error")} onClick={() => uploadStagedImages()} type="button"><UploadCloud size={15} />批量上传到 R2</button>
+                <span data-state={uploadSummary.errors ? "error" : uploadSummary.uploading ? "uploading" : "idle"}>{uploadSummary.uploading ? "上传中..." : uploadSummary.errors ? `${uploadSummary.errors} 个错误待处理` : "R2 就绪"}</span>
               </div>
-            ) : (
-              <label className="admin-v3-dropzone">
-                <ImagePlus size={32} />
-                <strong>Select images to preview</strong>
-                <span>Images are staged locally first, then uploaded to R2.</span>
-                <input accept="image/*" hidden multiple onChange={(event) => {
-                  const files = Array.from(event.currentTarget.files ?? []);
-                  void stageFiles(files);
-                  event.currentTarget.value = "";
-                }} type="file" />
-              </label>
-            )}
-          </div>
+            </div>
 
-          <div className="admin-v3-media-footer">
-            <button disabled={!mediaDrafts.some((draft) => draft.status === "local" || draft.status === "error")} onClick={() => uploadStagedImages()} type="button">
-              <UploadCloud size={15} />
-              Batch upload to R2
-            </button>
-            <span data-state={uploadSummary.errors ? "error" : uploadSummary.uploading ? "uploading" : "idle"}>
-              {uploadSummary.uploading ? "Uploading..." : uploadSummary.errors ? `${uploadSummary.errors} need attention` : "R2 ready"}
-            </span>
-          </div>
-        </aside>
+            <aside className="admin-xhs-editor">
+              <div>
+                <span>填写内容</span>
+                <h2>{selectedItem.title}</h2>
+              </div>
+              <label className="admin-xhs-json-import">
+                <FileJson size={15} />
+                导入 publish.json 到当前笔记
+                <input accept="application/json" hidden onChange={(event) => importPublishJson(event.target.files?.[0])} type="file" />
+              </label>
+              <Field label="标题" value={selectedItem.title} onChange={(value) => updateSelected({ title: value })} />
+              <Field label="LetDove code" value={selectedItem.letdove_code} onChange={(value) => updateSelected({ letdove_code: value })} />
+              <Field label="描述" multiline value={selectedItem.description} onChange={(value) => updateSelected({ description: value })} />
+              <Field label="标签" value={selectedItem.tags.join(", ")} onChange={(value) => updateSelected({ tags: splitCsv(value) })} />
+              <div className="admin-xhs-two">
+                <Field label="一级分类" value={selectedItem.category_l1} onChange={(value) => updateSelected({ category_l1: value })} />
+                <Field label="二级分类" value={selectedItem.category_l2} onChange={(value) => updateSelected({ category_l2: value })} />
+              </div>
+              <Field label="系列" value={selectedItem.series} onChange={(value) => updateSelected({ series: value })} />
+              <label className="admin-v3-field">
+                <span>状态</span>
+                <select value={selectedItem.status} onChange={(event) => updateSelected({ status: event.target.value as AdminStatus })}>
+                  <option value="draft">draft</option>
+                  <option value="published">published</option>
+                </select>
+              </label>
+              {notice && <p className="admin-xhs-alert">{notice}</p>}
+              <div className="admin-xhs-editor-actions">
+                <button onClick={saveDraft} type="button"><Save size={15} />存草稿</button>
+                <button onClick={publish} type="button"><Send size={15} />发布</button>
+              </div>
+            </aside>
+          </section>
+        )}
+
+        {(activeView === "notes" || activeView === "drafts") && (
+          <section className="admin-xhs-notes">
+            <div className="admin-xhs-notes-head">
+              <div>
+                <h2>{activeView === "drafts" ? "草稿箱" : "笔记管理"}</h2>
+                <span>{visibleManagerItems.length} 篇 · 支持拖拽排序</span>
+              </div>
+              <input aria-label="Search notes" onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、code、标签" value={query} />
+            </div>
+            <div className="admin-xhs-note-grid">
+              {visibleManagerItems.map((item, index) => (
+                <article
+                  className="admin-xhs-note-card"
+                  draggable
+                  key={item.id}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDragStart={() => setNoteDragIndex(index)}
+                  onDrop={() => reorderNote(index)}
+                >
+                  {item.media.cover ? <img alt="" src={item.media.cover} /> : <span>No image</span>}
+                  <section>
+                    <code>{item.letdove_code}</code>
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                    <small>{item.status} · order {item.display_order}</small>
+                    <div>
+                      <button onClick={() => {
+                        clearLocalMedia();
+                        setSelectedId(item.id);
+                        setActiveView("upload");
+                      }} type="button">编辑</button>
+                    </div>
+                  </section>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
       </section>
 
       {previewDraft && (
@@ -728,15 +802,19 @@ export function AdminDashboard() {
 
 function AdminLogin({ error, onLogin }: { error: string; onLogin: (formData: FormData) => void }) {
   return (
-    <main className="admin-v2-login-shell">
+    <main className="admin-xhs-login-shell">
       <form
-        className="admin-v2-login-card"
+        className="admin-xhs-login-card"
         onSubmit={(event) => {
           event.preventDefault();
           void onLogin(new FormData(event.currentTarget));
         }}
       >
-        <h1>LetDove Admin Login</h1>
+        <div className="admin-xhs-login-brand">
+          <span>LetDove</span>
+          <strong>创作服务平台</strong>
+        </div>
+        <h1>Admin Login</h1>
         <label>
           <span>Username</span>
           <input autoComplete="username" name="username" />

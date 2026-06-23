@@ -1,69 +1,142 @@
-export async function onRequestGet() {
+export async function onRequestGet({ request }) {
   return json({
+    environment: getRuntimeEnvironment(request),
     success: true,
-    message: "Upload API route registered"
+    urls: []
   });
 }
 
 export async function onRequestPost({ request, env }) {
+  const environment = getRuntimeEnvironment(request);
+
   try {
     if (!(await isAuthorized(request, env))) {
-      return json({ success: false, error: "Unauthorized upload request" }, 401);
+      return json({ environment, success: false, urls: [], error: "Unauthorized upload request" }, 401);
     }
 
+    const upload = await readUploadInput(request);
+
+    if (!upload) {
+      console.error("Invalid file input", {
+        contentType: request.headers.get("content-type"),
+        fileName: request.headers.get("x-letdove-file-name")
+      });
+      return json({ environment, success: false, urls: [], error: "Invalid file input" }, 400);
+    }
+
+    const bucket = env.R2_BUCKET || env.LETDOVE_IMAGES;
+
+    if (!bucket) {
+      console.error("R2 binding missing", {
+        hasLETDOVE_IMAGES: Boolean(env.LETDOVE_IMAGES),
+        hasR2_BUCKET: Boolean(env.R2_BUCKET)
+      });
+      return json({ environment, success: false, urls: [], error: "R2 not bound" }, 500);
+    }
+
+    const category = sanitizePathSegment(upload.category || "general");
+    const letdoveCode = sanitizePathSegment(upload.letdoveCode || "uncategorized");
+    const key = `letdove/${category}/${letdoveCode}/${getSafeFileName(upload.name)}`;
+
+    const baseUrl = (env.R2_PUBLIC_BASE_URL || "https://img.letdove.uk").replace(/\/$/, "");
+    const publicUrl = `${baseUrl}/${encodeR2Key(key)}`;
+
+    console.log("UPLOAD KEY:", key);
+    console.log("BUCKET:", bucket);
+    console.log("FINAL URL:", publicUrl);
+    console.log("R2 WRITE START", key);
+
+    try {
+      await bucket.put(key, upload.body, {
+        httpMetadata: {
+          contentType: upload.contentType
+        }
+      });
+    } catch (error) {
+      console.error("R2 WRITE FAILED", key, error);
+      return json({ environment, success: false, urls: [], error: `R2 write failed: ${String(error)}` }, 500);
+    }
+
+    console.log("R2 WRITE SUCCESS", key);
+
+    let writtenSize = upload.size ?? 0;
+
+    if (typeof bucket.head === "function") {
+      const writtenObject = await bucket.head(key);
+
+      if (!writtenObject) {
+        console.error("R2 HEAD FAILED", key);
+        return json({ environment, success: false, urls: [], error: `R2 write did not produce an object for key: ${key}` }, 500);
+      }
+
+      writtenSize = writtenObject.size ?? writtenSize;
+      console.log("R2 HEAD SUCCESS", key, writtenObject.size ?? "unknown-size");
+    }
+
+    return json({
+      environment,
+      key,
+      size: writtenSize,
+      success: true,
+      url: publicUrl,
+      urls: [publicUrl]
+    });
+  } catch (err) {
+    console.error("UPLOAD ERROR:", err);
+    return json({ environment, success: false, urls: [], error: String(err) }, 500);
+  }
+}
+
+async function readUploadInput(request) {
+  const contentType = request.headers.get("content-type") || "";
+
+  if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
     console.log("formData keys:", [...formData.keys()]);
     const file = getUploadFile(formData);
     console.log("file:", file);
 
     if (!isUploadFile(file)) {
-      console.error("Invalid file input", {
-        fileType: typeof file,
-        constructorName: file?.constructor?.name,
-        name: file?.name,
-        size: file?.size,
-        type: file?.type,
-        hasStream: Boolean(file?.stream),
-        hasArrayBuffer: Boolean(file?.arrayBuffer),
+      console.error("Invalid multipart file input", {
         entries: getFormDataDebugEntries(formData)
       });
-      return json({ success: false, error: "Invalid file input" }, 400);
+      return null;
     }
 
-    if (!env.LETDOVE_IMAGES) {
-      console.error("R2 binding missing: LETDOVE_IMAGES");
-      return json({ success: false, error: "R2 not bound" }, 500);
-    }
+    return {
+      body: typeof file.stream === "function" ? file.stream() : await file.arrayBuffer(),
+      category: String(formData.get("category") || ""),
+      contentType: typeof file.type === "string" && file.type ? file.type : "application/octet-stream",
+      letdoveCode: String(formData.get("letdove_code") || ""),
+      name: typeof file.name === "string" ? file.name : "image",
+      size: typeof file.size === "number" ? file.size : 0
+    };
+  }
 
-    const category = sanitizePathSegment(formData.get("category") || "general");
-    const letdoveCode = sanitizePathSegment(formData.get("letdove_code") || "uncategorized");
-    const uniqueId = `${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
-    const extension = getFileExtension(file);
-    const key = `letdove/${category}/${letdoveCode}/image_${uniqueId}.${extension}`;
-    const body = typeof file.stream === "function" ? file.stream() : await file.arrayBuffer();
-    const contentType = typeof file.type === "string" && file.type ? file.type : "application/octet-stream";
+  const fileName = request.headers.get("x-letdove-file-name") || "image";
+  const body = request.body ?? await request.arrayBuffer();
 
-    console.log("R2 KEY:", key);
+  if (!body) {
+    return null;
+  }
 
-    await env.LETDOVE_IMAGES.put(key, body, {
-      httpMetadata: {
-        contentType
-      }
-    });
+  return {
+    body,
+    category: request.headers.get("x-letdove-category") || "",
+    contentType: contentType || "application/octet-stream",
+    letdoveCode: request.headers.get("x-letdove-code") || "",
+    name: fileName,
+    size: Number(request.headers.get("content-length") || 0)
+  };
+}
 
-    const baseUrl = (env.R2_PUBLIC_BASE_URL || "https://letdove.uk").replace(/\/$/, "");
-    const publicUrl = `${baseUrl}/${key}`;
+function getRuntimeEnvironment(request) {
+  try {
+    const host = new URL(request.url).hostname;
 
-    console.log("UPLOAD SUCCESS:", publicUrl);
-
-    return json({
-      success: true,
-      url: publicUrl,
-      key
-    });
-  } catch (err) {
-    console.error("UPLOAD ERROR:", err);
-    return json({ success: false, error: String(err) }, 500);
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" ? "local" : "production";
+  } catch {
+    return "production";
   }
 }
 
@@ -140,10 +213,33 @@ function isUploadFile(value) {
 
 function getFileExtension(file) {
   const nameExtension = typeof file.name === "string" ? file.name.split(".").pop()?.toLowerCase() : "";
-  const typeExtension = typeof file.type === "string" ? file.type.split("/").pop()?.toLowerCase() : "";
+  const typeExtension = typeof file.contentType === "string" ? file.contentType.split("/").pop()?.toLowerCase() : "";
   const extension = nameExtension || typeExtension || "png";
 
   return extension.replace(/[^a-z0-9]/g, "") || "png";
+}
+
+function getSafeFileName(name) {
+  const decoded = safeDecodeURIComponent(name || "image");
+  const cleaned = decoded
+    .replace(/[\\/\u0000-\u001f\u007f]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = `image_${Date.now()}.png`;
+
+  return cleaned && cleaned.includes(".") ? cleaned : fallback;
+}
+
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function encodeR2Key(key) {
+  return key.split("/").map((segment) => encodeURIComponent(segment)).join("/");
 }
 
 function getFormDataDebugEntries(formData) {
