@@ -1,0 +1,4 @@
+ADMIN_USER=replace-me
+ADMIN_PASS=replace-me
+ADMIN_SESSION_SECRET=replace-me
+R2_PUBLIC_BASE_URL=https://letdove.uk

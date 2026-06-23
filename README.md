@@ -62,6 +62,14 @@ npm run build
 
 The static frontend is exported to `out/`. The upload API is a Cloudflare Pages Function in `functions/api/images/upload.js`.
 
+For local admin uploads, run the Cloudflare Pages preview server, not the plain Next.js dev server:
+
+```bash
+npm run dev
+```
+
+This command builds the static site and starts `wrangler pages dev out`, so `/api/images/upload` is served by Cloudflare Pages Functions with the `LETDOVE_IMAGES` R2 binding. Use `npm run dev:next` only for frontend-only UI work; R2 upload will not work there.
+
 ## Cloudflare Deployment
 
 Use Cloudflare Pages for production:
@@ -70,9 +78,21 @@ Use Cloudflare Pages for production:
 - Output directory: `out`
 - Functions directory: `functions`
 - R2 binding: `LETDOVE_IMAGES -> letdove-images`
-- Environment variable: `R2_PUBLIC_BASE_URL=https://img.letdove.uk`
+- Wrangler vars: `ADMIN_USER`, `ADMIN_PASS`, `R2_PUBLIC_BASE_URL=https://letdove.uk`
+- Optional secret: `ADMIN_SESSION_SECRET`
 
 The upload endpoint is served by Cloudflare Pages Functions at `/api/images/upload`.
+
+The admin login endpoint is served by Cloudflare Pages Functions at `/api/admin/login`. Credentials are read from the Cloudflare runtime `env`, not from the static frontend. Configure non-sensitive vars in `wrangler.toml`:
+
+```text
+[vars]
+ADMIN_USER = "admin"
+ADMIN_PASS = "adminissimon"
+R2_PUBLIC_BASE_URL = "https://letdove.uk"
+```
+
+Optionally set a separate session signing secret with `wrangler pages secret put ADMIN_SESSION_SECRET`.
 
 Wrangler uses:
 
@@ -101,14 +121,14 @@ Cloudflare configuration:
 - R2 binding name: `LETDOVE_IMAGES`
 - Environment variable: `R2_PUBLIC_BASE_URL`
 
-`R2_PUBLIC_BASE_URL` should be `https://img.letdove.uk`. The Pages Function reads R2 through `env.LETDOVE_IMAGES` and uploads with `env.LETDOVE_IMAGES.put()`. The admin uploader refuses to save base64 image data; failed uploads leave the existing media unchanged.
+`R2_PUBLIC_BASE_URL` should be `https://letdove.uk`. The Pages Function reads R2 through `env.LETDOVE_IMAGES` and uploads with `env.LETDOVE_IMAGES.put()`. The admin uploader refuses to save base64 image data; failed uploads leave the existing media unchanged.
 
 Single-file upload success response:
 
 ```json
 {
   "success": true,
-  "url": "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
+  "url": "https://letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
   "key": "letdove/prompt/p01_q01/image_001.jpg"
 }
 ```
@@ -120,7 +140,7 @@ Multi-file uploads return:
   "success": true,
   "images": [
     {
-      "url": "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
+      "url": "https://letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
       "key": "letdove/prompt/p01_q01/image_001.jpg"
     }
   ]
@@ -146,10 +166,10 @@ Required fields for each item:
   "title": "Product Hero Prompt",
   "description": "Short searchable summary",
   "media": {
-    "cover": "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
+    "cover": "https://letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
     "gallery": [
-      "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
-      "https://img.letdove.uk/letdove/prompt/p01_q01/image_002.jpg"
+      "https://letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
+      "https://letdove.uk/letdove/prompt/p01_q01/image_002.jpg"
     ]
   },
   "category_l1": "prompt",
@@ -174,5 +194,5 @@ Required fields for each item:
 Future migration path:
 
 ```text
-Admin UI -> Next.js App Router API -> Cloudflare R2 -> img.letdove.uk CDN -> JSON -> Frontend lexicon
+Admin UI -> Cloudflare Pages Function -> Cloudflare R2 -> letdove.uk CDN -> JSON -> Frontend lexicon
 ```

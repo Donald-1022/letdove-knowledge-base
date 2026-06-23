@@ -1,71 +1,100 @@
 "use client";
 
 import {
-  Copy,
+  AlertCircle,
+  CheckCircle2,
   Download,
   Eye,
   FileJson,
+  GripVertical,
+  ImagePlus,
+  Loader2,
   LogOut,
-  ExternalLink,
+  Maximize2,
   Plus,
   Save,
   Send,
   Trash2,
-  Upload
+  UploadCloud,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import seedItems from "@/data/letdove.json";
 import type { LetDoveItem } from "@/lib/letdove";
 
-const authKey = "letdove-admin-auth";
+const authKey = "letdove-admin-token";
 const storageKey = "letdove-admin-json";
+const maxUploadAttempts = 3;
 
 type AdminStatus = "published" | "draft";
-type UploadState = "idle" | "uploading" | "success" | "error";
+type MediaStatus = "local" | "uploading" | "uploaded" | "error";
 type AdminItem = LetDoveItem & {
   display_order: number;
   status: AdminStatus;
   visible: boolean;
 };
 
+type LoginResponse =
+  | { success: true; token: string }
+  | { success: false; error: string };
+
 type UploadResponse =
-  | {
-      success: true;
-      key: string;
-      url: string;
-    }
-  | {
-      success: true;
-      images: Array<{
-        key: string;
-        url: string;
-      }>;
-    }
-  | {
-      success: false;
-      error: string;
-    };
+  | { success: true; key: string; url: string }
+  | { success: false; error: string };
+
+type MediaDraft = {
+  aspectRatio?: number;
+  error?: string;
+  file?: File;
+  id: string;
+  key?: string;
+  name: string;
+  previewUrl: string;
+  progress: number;
+  publicUrl?: string;
+  size: number;
+  source: "local" | "r2";
+  status: MediaStatus;
+};
+
+type UploadFailureKind = "network" | "json" | "server" | "r2" | "invalid-response" | "invalid-file";
+
+type ParsedUploadResponse =
+  | { data: UploadResponse; ok: true; text: string }
+  | { error: string; kind: UploadFailureKind; ok: false; text: string };
 
 export function AdminDashboard() {
   const [authenticated, setAuthenticated] = useState(false);
+  const [token, setToken] = useState("");
   const [loginError, setLoginError] = useState("");
   const [items, setItems] = useState<AdminItem[]>(() => normalizeItems(seedItems as LetDoveItem[]));
   const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | AdminStatus>("all");
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [notice, setNotice] = useState("");
-  const [failedImages, setFailedImages] = useState<string[]>([]);
+  const [mediaDrafts, setMediaDrafts] = useState<MediaDraft[]>([]);
+  const [previewDraft, setPreviewDraft] = useState<MediaDraft | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    setAuthenticated(window.localStorage.getItem(authKey) === "true");
+    const storedToken = window.localStorage.getItem(authKey) ?? "";
+    setToken(storedToken);
+    setAuthenticated(Boolean(storedToken));
 
     const stored = window.localStorage.getItem(storageKey);
     const nextItems = stored ? normalizeItems(JSON.parse(stored) as LetDoveItem[]) : normalizeItems(seedItems as LetDoveItem[]);
 
     setItems(nextItems);
     setSelectedId(nextItems[0]?.id ?? "");
+
+    return () => {
+      mediaDrafts.forEach((draft) => {
+        if (draft.source === "local") {
+          URL.revokeObjectURL(draft.previewUrl);
+        }
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const sortedItems = useMemo(
@@ -78,20 +107,16 @@ export function AdminDashboard() {
 
     return sortedItems.filter((item) => {
       const statusMatch = filter === "all" || item.status === filter;
-      const queryMatch =
-        !normalizedQuery ||
-        [
-          item.letdove_code,
-          item.title,
-          item.category_l1,
-          item.category_l2,
-          ...item.tags
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery);
+      const searchable = [
+        item.letdove_code,
+        item.title,
+        item.category_l1,
+        item.category_l2,
+        item.series,
+        ...item.tags
+      ].join(" ").toLowerCase();
 
-      return statusMatch && queryMatch;
+      return statusMatch && (!normalizedQuery || searchable.includes(normalizedQuery));
     });
   }, [filter, query, sortedItems]);
 
@@ -100,23 +125,59 @@ export function AdminDashboard() {
     [filteredItems, items, selectedId]
   );
 
-  function login(formData: FormData) {
-    const username = String(formData.get("username") ?? "");
-    const password = String(formData.get("password") ?? "");
+  const allMedia = useMemo(() => {
+    const existing = (selectedItem?.media.gallery ?? []).map((url, index): MediaDraft => ({
+      id: `r2-${url}-${index}`,
+      name: getImageName(url),
+      previewUrl: url,
+      progress: 100,
+      publicUrl: url,
+      size: 0,
+      source: "r2",
+      status: "uploaded"
+    }));
 
-    if (username === "admin" && password === "admin") {
-      window.localStorage.setItem(authKey, "true");
-      setAuthenticated(true);
-      setLoginError("");
+    return [...existing, ...mediaDrafts];
+  }, [mediaDrafts, selectedItem]);
+
+  const uploadSummary = useMemo(() => {
+    const total = mediaDrafts.length;
+    const uploaded = mediaDrafts.filter((draft) => draft.status === "uploaded").length;
+    const uploading = mediaDrafts.some((draft) => draft.status === "uploading");
+    const errors = mediaDrafts.filter((draft) => draft.status === "error").length;
+
+    return { errors, total, uploaded, uploading };
+  }, [mediaDrafts]);
+
+  async function login(formData: FormData) {
+    setLoginError("");
+
+    const response = await fetch("/api/admin/login", {
+      body: JSON.stringify({
+        password: String(formData.get("password") ?? ""),
+        username: String(formData.get("username") ?? "")
+      }),
+      headers: {
+        "content-type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = await response.json().catch(() => ({ success: false, error: "Login endpoint did not return JSON." })) as LoginResponse;
+
+    if (!response.ok || !payload.success) {
+      setLoginError(payload.success ? "Login failed." : payload.error);
       return;
     }
 
-    setLoginError("Invalid username or password.");
+    window.localStorage.setItem(authKey, payload.token);
+    setToken(payload.token);
+    setAuthenticated(true);
   }
 
   function logout() {
     window.localStorage.removeItem(authKey);
     setAuthenticated(false);
+    setToken("");
   }
 
   function persist(nextItems: AdminItem[], message = "Saved JSON draft.") {
@@ -132,42 +193,37 @@ export function AdminDashboard() {
     }
 
     persist(
-      items.map((item) => {
-        if (item.id !== selectedItem.id) {
-          return item;
-        }
-
-        const nextItem = normalizeItem({
+      items.map((item) => item.id === selectedItem.id
+        ? normalizeItem({
           ...item,
           ...patch,
           order: patch.display_order ?? patch.order ?? item.order,
           display_order: patch.display_order ?? patch.order ?? item.display_order,
           updated_at: new Date().toISOString()
-        });
-
-        return nextItem;
-      }),
-      "Unsaved-looking changes are stored in the browser JSON draft."
+        })
+        : item
+      ),
+      "Draft updated in browser storage."
     );
   }
 
   function createNew() {
     const nextItem = createItem(items.length + 1);
+    clearLocalMedia();
     persist([nextItem, ...items], "Created new draft card.");
     setSelectedId(nextItem.id);
   }
 
   function saveDraft() {
-    if (!selectedItem) {
-      return;
-    }
-
     updateSelected({ status: "draft", visible: true });
     setNotice("Draft saved. Export JSON to publish this data file.");
   }
 
   function publish() {
-    if (!selectedItem) {
+    const pending = mediaDrafts.filter((draft) => draft.source === "local" && draft.status !== "uploaded");
+
+    if (pending.length) {
+      setNotice("Upload or remove pending local images before publishing.");
       return;
     }
 
@@ -180,6 +236,7 @@ export function AdminDashboard() {
       return;
     }
 
+    clearLocalMedia();
     const nextItems = items.filter((item) => item.id !== selectedItem.id);
     persist(nextItems, `Deleted ${selectedItem.letdove_code}.`);
     setSelectedId(nextItems[0]?.id ?? "");
@@ -200,142 +257,260 @@ export function AdminDashboard() {
       return;
     }
 
-    const imported = normalizeItems(JSON.parse(await file.text()) as LetDoveItem[]);
-    persist(imported, "Imported JSON draft.");
-    setSelectedId(imported[0]?.id ?? "");
-  }
-
-  async function uploadImages(files: FileList | null) {
-    if (!files?.length || !selectedItem) {
-      return;
-    }
-
-    if (uploadState === "uploading") {
-      return;
-    }
-
-    const beforeItems = items;
-    setUploadState("uploading");
-    setNotice("Uploading images to R2...");
-
     try {
-      const urls = await uploadFiles(files, selectedItem);
-
-      if (!urls.length) {
-        throw new Error("Upload endpoint did not return public R2 URLs.");
-      }
-
-      const nextItems = beforeItems.map((item) => {
-        if (item.id !== selectedItem.id) {
-          return item;
-        }
-
-        const gallery = [...item.media.gallery, ...urls];
-        return normalizeItem({
-          ...item,
-          media: {
-            cover: item.media.cover || gallery[0] || "",
-            gallery
-          },
-          updated_at: new Date().toISOString()
-        });
-      });
-
-      persist(nextItems, `${urls.length} image${urls.length > 1 ? "s" : ""} uploaded. Latest: ${urls[urls.length - 1]}`);
-      setUploadState("success");
-    } catch (error) {
-      setItems(beforeItems);
-      window.localStorage.setItem(storageKey, JSON.stringify(beforeItems, null, 2));
-      setUploadState("error");
-      setNotice(error instanceof Error ? error.message : "Upload failed. JSON was not changed.");
-    }
-  }
-
-  async function uploadFiles(files: FileList, item: AdminItem) {
-    const selectedFiles = Array.from(files).filter((file): file is File => file instanceof File);
-
-    if (!selectedFiles.length) {
-      throw new Error("No file selected");
-    }
-
-    const urls: string[] = [];
-
-    for (const [index, file] of selectedFiles.entries()) {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("category", item.category_l1 || "");
-      formData.append("letdove_code", item.letdove_code || "");
-      formData.append("start_index", String((item.media.gallery.length || 0) + index + 1));
-
-      const response = await fetch("/api/images/upload", {
-        body: formData,
-        method: "POST"
-      });
-
-      const payload = await readUploadResponse(response);
-
-      if (!response.ok || !payload.success) {
-        throw new Error(!payload.success ? payload.error : "R2 upload failed.");
-      }
-
-      if (!("url" in payload) || typeof payload.url !== "string") {
-        throw new Error("Upload failed: missing URL");
-      }
-
-      urls.push(payload.url);
-    }
-
-    return urls.filter((url): url is string => typeof url === "string" && url.startsWith("https://img.letdove.uk/"));
-  }
-
-  async function readUploadResponse(response: Response) {
-    const text = await response.text();
-
-    try {
-      return JSON.parse(text) as UploadResponse;
+      const imported = normalizeItems(JSON.parse(await file.text()) as LetDoveItem[]);
+      clearLocalMedia();
+      persist(imported, "Imported JSON draft.");
+      setSelectedId(imported[0]?.id ?? "");
     } catch {
-      throw new Error(
-        text.startsWith("Server")
-          ? "Upload endpoint returned a Server Action response. Use Cloudflare Pages preview/deploy, not next dev, for R2 uploads."
-          : `Upload endpoint did not return JSON: ${text.slice(0, 120)}`
-      );
+      setNotice("Import failed. Please choose a valid LetDove JSON file.");
     }
   }
 
-  function reorderImage(targetIndex: number) {
-    if (!selectedItem || dragIndex === null || dragIndex === targetIndex) {
-      setDragIndex(null);
-      return;
+  async function stageFiles(files: File[]) {
+    const staged = await Promise.all(Array.from(files).map(createMediaDraft));
+    const accepted = staged.filter((draft) => draft.status !== "error");
+    const rejected = staged.length - accepted.length;
+
+    setMediaDrafts((current) => [...current, ...staged]);
+    setNotice(rejected ? `${accepted.length} staged, ${rejected} rejected by validation.` : `${accepted.length} image${accepted.length === 1 ? "" : "s"} staged for preview.`);
+  }
+
+  async function createMediaDraft(file: File): Promise<MediaDraft> {
+    const id = `${Date.now()}-${crypto.randomUUID()}`;
+    const previewUrl = URL.createObjectURL(file);
+    const baseDraft: MediaDraft = {
+      file,
+      id,
+      name: file.name || "image",
+      previewUrl,
+      progress: 0,
+      size: file.size,
+      source: "local",
+      status: "local"
+    };
+
+    if (!file.type.startsWith("image/")) {
+      return { ...baseDraft, error: "Only image files are supported.", status: "error" };
     }
 
-    const gallery = [...selectedItem.media.gallery];
-    const [dragged] = gallery.splice(dragIndex, 1);
-    gallery.splice(targetIndex, 0, dragged);
+    if (file.size > 15 * 1024 * 1024) {
+      return { ...baseDraft, error: "Image must be smaller than 15MB.", status: "error" };
+    }
 
-    updateSelected({
-      media: {
-        cover: gallery.includes(selectedItem.media.cover) ? selectedItem.media.cover : gallery[0] ?? "",
-        gallery
+    try {
+      const dimensions = await readImageDimensions(previewUrl);
+      const aspectRatio = dimensions.width / dimensions.height;
+
+      if (aspectRatio < 0.55 || aspectRatio > 1.8) {
+        return {
+          ...baseDraft,
+          aspectRatio,
+          error: "Recommended image ratio is near 4:5, square, or portrait.",
+          status: "error"
+        };
       }
-    });
-    setDragIndex(null);
+
+      return { ...baseDraft, aspectRatio };
+    } catch {
+      return { ...baseDraft, error: "Could not read image preview.", status: "error" };
+    }
   }
 
-  function deleteImage(index: number) {
+  async function uploadStagedImages(targetIds?: string[]) {
     if (!selectedItem) {
       return;
     }
 
-    const gallery = selectedItem.media.gallery.filter((_, imageIndex) => imageIndex !== index);
-    updateSelected({
-      media: {
-        cover: gallery.includes(selectedItem.media.cover) ? selectedItem.media.cover : gallery[0] ?? "",
-        gallery
-      }
-    });
+    const queue = mediaDrafts.filter((draft) =>
+      draft.source === "local" &&
+      draft.file &&
+      draft.status !== "uploaded" &&
+      draft.status !== "uploading" &&
+      (!targetIds || targetIds.includes(draft.id))
+    );
+
+    if (!queue.length) {
+      setNotice("No staged images are ready to upload.");
+      return;
+    }
+
+    for (const draft of queue) {
+      await uploadOneDraft(draft, selectedItem);
+    }
   }
 
-  function setCover(url: string) {
+  async function uploadOneDraft(draft: MediaDraft, item: AdminItem) {
+    if (!draft.file) {
+      markDraft(draft.id, { error: "Missing local file.", status: "error" });
+      return;
+    }
+
+    markDraft(draft.id, { error: undefined, progress: 12, status: "uploading" });
+
+    let lastError = "Upload failed.";
+
+    for (let attempt = 1; attempt <= maxUploadAttempts; attempt += 1) {
+      const result = await uploadFile(draft.file, item, item.media.gallery.length + mediaDrafts.filter((entry) => entry.status === "uploaded").length + 1, token);
+
+      if (result.ok) {
+        markDraft(draft.id, { key: result.key, progress: 100, publicUrl: result.url, status: "uploaded" });
+        appendUploadedUrl(item.id, result.url);
+        setNotice(`${draft.name} uploaded to R2.`);
+        return;
+      }
+
+      lastError = result.error;
+      markDraft(draft.id, { error: `${result.error}${attempt < maxUploadAttempts ? " Retrying..." : ""}`, progress: Math.min(85, 18 + attempt * 24), status: "uploading" });
+
+      if (attempt < maxUploadAttempts) {
+        await wait(500 * attempt);
+      }
+    }
+
+    markDraft(draft.id, { error: lastError, progress: 0, status: "error" });
+  }
+
+  function appendUploadedUrl(itemId: string, url: string) {
+    const nextItems = items.map((item) => {
+      if (item.id !== itemId || item.media.gallery.includes(url)) {
+        return item;
+      }
+
+      const gallery = [...item.media.gallery, url];
+
+      return normalizeItem({
+        ...item,
+        media: {
+          cover: item.media.cover || url,
+          gallery
+        },
+        updated_at: new Date().toISOString()
+      });
+    });
+
+    persist(nextItems, "Uploaded image URL saved to media.gallery.");
+  }
+
+  async function uploadFile(file: File, item: AdminItem, startIndex: number, authToken: string) {
+    if (!file || typeof file.arrayBuffer !== "function" || file.size <= 0) {
+      return { error: "Invalid file input.", ok: false as const };
+    }
+
+    const formData = new FormData();
+    formData.append("file", file, file.name || `image_${Date.now()}`);
+    formData.append("category", item.category_l1 || "");
+    formData.append("letdove_code", item.letdove_code || "");
+    formData.append("start_index", String(startIndex));
+
+    let response: Response;
+
+    try {
+      response = await fetch("/api/images/upload", {
+        body: formData,
+        headers: authToken ? { authorization: `Bearer ${authToken}` } : undefined,
+        method: "POST"
+      });
+    } catch (error) {
+      return {
+        error: `Network upload failed: ${error instanceof Error ? error.message : "request could not be sent"}`,
+        ok: false as const
+      };
+    }
+
+    const parsed = await readUploadResponse(response);
+
+    if (!parsed.ok) {
+      return { error: parsed.error, ok: false as const };
+    }
+
+    if (!response.ok || !parsed.data.success) {
+      return {
+        error: parsed.data.success ? `R2 upload failed with HTTP ${response.status}.` : parsed.data.error,
+        ok: false as const
+      };
+    }
+
+    if (!parsed.data.url || !isPersistableImageUrl(parsed.data.url)) {
+      return { error: "Upload succeeded but did not return a usable public URL.", ok: false as const };
+    }
+
+    return { key: parsed.data.key, ok: true as const, url: parsed.data.url };
+  }
+
+  async function readUploadResponse(response: Response): Promise<ParsedUploadResponse> {
+    const text = await response.text();
+
+    try {
+      return { data: JSON.parse(text) as UploadResponse, ok: true, text };
+    } catch {
+      const isServerActionText = text.startsWith("Server") || text.includes("Failed to find Server Action");
+      const isHtml = /^\s*<!doctype html|^\s*<html/i.test(text);
+
+      return {
+        error: isServerActionText
+          ? "Current server is Next dev. Use npm run dev so Cloudflare Pages Functions handle uploads."
+          : isHtml
+            ? `Upload endpoint returned HTML with HTTP ${response.status}.`
+            : `Upload endpoint did not return JSON: ${text.slice(0, 160) || `HTTP ${response.status}`}`,
+        kind: isServerActionText ? "server" : "json",
+        ok: false,
+        text
+      };
+    }
+  }
+
+  function reorderMedia(targetIndex: number) {
+    if (dragIndex === null || dragIndex === targetIndex || !selectedItem) {
+      setDragIndex(null);
+      return;
+    }
+
+    const existingCount = selectedItem.media.gallery.length;
+
+    if (dragIndex < existingCount && targetIndex < existingCount) {
+      const gallery = [...selectedItem.media.gallery];
+      const [dragged] = gallery.splice(dragIndex, 1);
+      gallery.splice(targetIndex, 0, dragged);
+      updateSelected({
+        media: {
+          cover: gallery.includes(selectedItem.media.cover) ? selectedItem.media.cover : gallery[0] ?? "",
+          gallery
+        }
+      });
+    } else if (dragIndex >= existingCount && targetIndex >= existingCount) {
+      const local = [...mediaDrafts];
+      const [dragged] = local.splice(dragIndex - existingCount, 1);
+      local.splice(targetIndex - existingCount, 0, dragged);
+      setMediaDrafts(local);
+    }
+
+    setDragIndex(null);
+  }
+
+  function removeMedia(draft: MediaDraft) {
+    if (draft.source === "r2" && selectedItem) {
+      const gallery = selectedItem.media.gallery.filter((url) => url !== draft.publicUrl);
+      updateSelected({
+        media: {
+          cover: gallery.includes(selectedItem.media.cover) ? selectedItem.media.cover : gallery[0] ?? "",
+          gallery
+        }
+      });
+      return;
+    }
+
+    setMediaDrafts((current) => current.filter((item) => item.id !== draft.id));
+    if (draft.source === "local") {
+      URL.revokeObjectURL(draft.previewUrl);
+    }
+  }
+
+  function setCover(url: string | undefined) {
+    if (!url) {
+      return;
+    }
+
     updateSelected({
       media: {
         cover: url,
@@ -344,12 +519,17 @@ export function AdminDashboard() {
     });
   }
 
-  async function copyText(text: string) {
-    if (navigator.clipboard) {
-      await navigator.clipboard.writeText(text);
-    }
+  function markDraft(id: string, patch: Partial<MediaDraft>) {
+    setMediaDrafts((current) => current.map((draft) => draft.id === id ? { ...draft, ...patch } : draft));
+  }
 
-    setNotice("Image URL copied.");
+  function clearLocalMedia() {
+    mediaDrafts.forEach((draft) => {
+      if (draft.source === "local") {
+        URL.revokeObjectURL(draft.previewUrl);
+      }
+    });
+    setMediaDrafts([]);
   }
 
   if (!authenticated) {
@@ -357,43 +537,44 @@ export function AdminDashboard() {
   }
 
   return (
-    <main className="admin-v2-shell">
-      <header className="admin-v2-topbar">
+    <main className="admin-v3-shell">
+      <header className="admin-v3-topbar">
         <div>
           <span>LetDove CMS</span>
           <h1>Content Manager</h1>
         </div>
-        <div className="admin-v2-actions">
-          <button onClick={createNew} type="button"><Plus size={15} />Create new</button>
-          <button onClick={saveDraft} type="button"><Save size={15} />Save draft</button>
-          <button onClick={publish} type="button"><Send size={15} />Publish</button>
-          <button onClick={() => downloadJson("letdove.json", items)} type="button"><Download size={15} />Export JSON</button>
-          <label><FileJson size={15} />Import JSON<input accept="application/json" hidden onChange={(event) => importJson(event.target.files?.[0])} type="file" /></label>
+        <div className="admin-v3-actions">
+          <button onClick={createNew} type="button"><Plus size={15} />Create</button>
+          <button onClick={() => downloadJson("letdove.json", items)} type="button"><Download size={15} />Export</button>
+          <label><FileJson size={15} />Import<input accept="application/json" hidden onChange={(event) => importJson(event.target.files?.[0])} type="file" /></label>
           <button onClick={logout} type="button"><LogOut size={15} />Logout</button>
         </div>
       </header>
 
-      <section className="admin-v2-grid">
-        <aside className="admin-v2-left">
-          <div className="admin-v2-panel-head">
+      <section className="admin-v3-grid">
+        <aside className="admin-v3-panel admin-v3-left">
+          <div className="admin-v3-panel-head">
             <strong>Content list</strong>
             <span>{filteredItems.length} / {items.length}</span>
           </div>
           <input
             aria-label="Search cards"
-            className="admin-v2-search"
+            className="admin-v3-search"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search code, title, tags..."
             value={query}
           />
-          <div className="admin-v2-tabs">
+          <div className="admin-v3-tabs">
             {(["all", "published", "draft"] as const).map((option) => (
               <button data-active={filter === option} key={option} onClick={() => setFilter(option)} type="button">{option}</button>
             ))}
           </div>
-          <div className="admin-v2-list">
+          <div className="admin-v3-list">
             {filteredItems.map((item) => (
-              <button className="admin-v2-list-item" data-active={item.id === selectedItem?.id} key={item.id} onClick={() => setSelectedId(item.id)} type="button">
+              <button className="admin-v3-list-item" data-active={item.id === selectedItem?.id} key={item.id} onClick={() => {
+                clearLocalMedia();
+                setSelectedId(item.id);
+              }} type="button">
                 {item.media.cover ? <img alt="" src={item.media.cover} /> : <span>No image</span>}
                 <div>
                   <code>{item.letdove_code}</code>
@@ -405,26 +586,26 @@ export function AdminDashboard() {
           </div>
         </aside>
 
-        <section className="admin-v2-center">
+        <section className="admin-v3-panel admin-v3-center">
           {selectedItem ? (
             <>
-              <div className="admin-v2-editor-head">
+              <div className="admin-v3-editor-title">
                 <div>
-                  <span>Editing</span>
+                  <span>Metadata editor</span>
                   <h2>{selectedItem.title}</h2>
                 </div>
-                <button className="admin-v2-danger" onClick={deleteSelected} type="button"><Trash2 size={15} />Delete</button>
+                <button className="admin-v3-danger" onClick={deleteSelected} type="button"><Trash2 size={15} />Delete</button>
               </div>
 
-              <div className="admin-v2-form-grid">
-                <Field label="id" value={selectedItem.id} onChange={(value) => updateSelected({ id: value })} />
-                <Field label="letdove_code" value={selectedItem.letdove_code} onChange={(value) => updateSelected({ letdove_code: value })} />
+              <div className="admin-v3-form-grid">
                 <Field label="title" value={selectedItem.title} onChange={(value) => updateSelected({ title: value })} />
+                <Field label="letdove_code" value={selectedItem.letdove_code} onChange={(value) => updateSelected({ letdove_code: value })} />
+                <Field label="id" value={selectedItem.id} onChange={(value) => updateSelected({ id: value })} />
+                <Field label="series" value={selectedItem.series} onChange={(value) => updateSelected({ series: value })} />
                 <Field label="category_l1" value={selectedItem.category_l1} onChange={(value) => updateSelected({ category_l1: value })} />
                 <Field label="category_l2" value={selectedItem.category_l2} onChange={(value) => updateSelected({ category_l2: value })} />
-                <Field label="series" value={selectedItem.series} onChange={(value) => updateSelected({ series: value })} />
                 <Field label="tags" value={selectedItem.tags.join(", ")} onChange={(value) => updateSelected({ tags: splitCsv(value) })} />
-                <label className="admin-v2-field">
+                <label className="admin-v3-field">
                   <span>status</span>
                   <select value={selectedItem.status} onChange={(event) => updateSelected({ status: event.target.value as AdminStatus })}>
                     <option value="published">published</option>
@@ -438,69 +619,109 @@ export function AdminDashboard() {
               <Field label="description" multiline value={selectedItem.description} onChange={(value) => updateSelected({ description: value })} />
               <Field label="search_index" readOnly value={selectedItem.search_index} onChange={() => undefined} />
 
-              <section className="admin-v2-image-panel">
-                <div className="admin-v2-panel-head">
-                  <div>
-                    <strong>Uploaded images</strong>
-                    <span>{selectedItem.media.gallery.length} image{selectedItem.media.gallery.length === 1 ? "" : "s"}</span>
-                  </div>
-                  <label data-state={uploadState}><Upload size={15} />{uploadState === "uploading" ? "Uploading" : "Batch upload"}<input accept="image/*" disabled={uploadState === "uploading"} hidden multiple onChange={(event) => {
-                    const file = event.target.files?.[0];
+              {notice && <p className="admin-v3-notice">{notice}</p>}
 
-                    if (!file) {
-                      setUploadState("error");
-                      setNotice("No file selected");
-                      return;
-                    }
-
-                    uploadImages(event.target.files);
-                    event.target.value = "";
-                  }} type="file" /></label>
-                </div>
-                {selectedItem.media.gallery.length ? <div className="admin-v2-image-grid">
-                  {selectedItem.media.gallery.map((image, index) => {
-                    const imageFailed = failedImages.includes(image);
-
-                    return (
-                    <div
-                      className="admin-v2-image"
-                      draggable
-                      key={`${image}-${index}`}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDragStart={() => setDragIndex(index)}
-                      onDrop={() => reorderImage(index)}
-                    >
-                      {imageFailed ? (
-                        <div className="admin-v2-image-fallback">Image URL saved, but preview failed to load.</div>
-                      ) : (
-                        <img alt="" onError={() => setFailedImages((current) => current.includes(image) ? current : [...current, image])} src={image} />
-                      )}
-                      <code title={image}>{image}</code>
-                      <div>
-                        <button data-active={selectedItem.media.cover === image} onClick={() => setCover(image)} type="button"><Eye size={14} />Cover</button>
-                        <button onClick={() => copyText(image)} type="button"><Copy size={14} /></button>
-                        <a href={image} rel="noreferrer" target="_blank"><ExternalLink size={14} /></a>
-                        <button onClick={() => deleteImage(index)} type="button"><Trash2 size={14} /></button>
-                      </div>
-                    </div>
-                  )})}
-                </div> : <div className="admin-v2-empty">No uploaded images yet.</div>}
-                {notice && <p className="admin-v2-notice" data-state={uploadState}>{notice}</p>}
-              </section>
+              <div className="admin-v3-fixed-actions">
+                <button onClick={saveDraft} type="button"><Save size={15} />Save draft</button>
+                <button onClick={publish} type="button"><Send size={15} />Publish</button>
+              </div>
             </>
           ) : (
-            <div className="admin-v2-empty">Create a card to start editing.</div>
+            <div className="admin-v3-empty">Create a card to start editing.</div>
           )}
         </section>
 
-        <aside className="admin-v2-right">
-          <div className="admin-v2-panel-head">
-            <strong>Live preview</strong>
-            <span>4:5 card</span>
+        <aside className="admin-v3-panel admin-v3-media">
+          <div className="admin-v3-panel-head">
+            <div>
+              <strong>Media editor</strong>
+              <span>{allMedia.length} image{allMedia.length === 1 ? "" : "s"} · {uploadSummary.uploaded}/{uploadSummary.total || 0} staged uploaded</span>
+            </div>
+            <label className="admin-v3-upload-button">
+              <ImagePlus size={16} />
+              Add
+              <input accept="image/*" hidden multiple onChange={(event) => {
+                const files = Array.from(event.currentTarget.files ?? []);
+                void stageFiles(files);
+                event.currentTarget.value = "";
+              }} type="file" />
+            </label>
           </div>
-          {selectedItem && <LivePreview item={selectedItem} />}
+
+          <div className="admin-v3-media-stage">
+            {allMedia.length ? (
+              <div className="admin-v3-media-grid">
+                {allMedia.map((draft, index) => (
+                  <article
+                    className="admin-v3-media-tile"
+                    data-status={draft.status}
+                    draggable
+                    key={draft.id}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDragStart={() => setDragIndex(index)}
+                    onDrop={() => reorderMedia(index)}
+                  >
+                    <img alt="" src={draft.previewUrl} />
+                    <button aria-label="Preview image" className="admin-v3-media-preview" onClick={() => setPreviewDraft(draft)} type="button"><Maximize2 size={15} /></button>
+                    <span className="admin-v3-grip"><GripVertical size={15} /></span>
+                    <MediaStatusBadge draft={draft} />
+                    {draft.status === "uploading" && <progress max={100} value={draft.progress} />}
+                    <div className="admin-v3-media-meta">
+                      <strong>{draft.name}</strong>
+                      <small>{draft.publicUrl ?? formatBytes(draft.size)}</small>
+                    </div>
+                    <div className="admin-v3-media-controls">
+                      <button disabled={!draft.publicUrl} onClick={() => setCover(draft.publicUrl)} type="button"><Eye size={14} />Cover</button>
+                      {draft.source === "local" && draft.status !== "uploaded" && (
+                        <button onClick={() => uploadStagedImages([draft.id])} type="button"><UploadCloud size={14} />Upload</button>
+                      )}
+                      {draft.status === "error" && draft.file && (
+                        <button onClick={() => uploadStagedImages([draft.id])} type="button">Retry</button>
+                      )}
+                      <button onClick={() => removeMedia(draft)} type="button"><Trash2 size={14} /></button>
+                    </div>
+                    {draft.error && <p>{draft.error}</p>}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <label className="admin-v3-dropzone">
+                <ImagePlus size={32} />
+                <strong>Select images to preview</strong>
+                <span>Images are staged locally first, then uploaded to R2.</span>
+                <input accept="image/*" hidden multiple onChange={(event) => {
+                  const files = Array.from(event.currentTarget.files ?? []);
+                  void stageFiles(files);
+                  event.currentTarget.value = "";
+                }} type="file" />
+              </label>
+            )}
+          </div>
+
+          <div className="admin-v3-media-footer">
+            <button disabled={!mediaDrafts.some((draft) => draft.status === "local" || draft.status === "error")} onClick={() => uploadStagedImages()} type="button">
+              <UploadCloud size={15} />
+              Batch upload to R2
+            </button>
+            <span data-state={uploadSummary.errors ? "error" : uploadSummary.uploading ? "uploading" : "idle"}>
+              {uploadSummary.uploading ? "Uploading..." : uploadSummary.errors ? `${uploadSummary.errors} need attention` : "R2 ready"}
+            </span>
+          </div>
         </aside>
       </section>
+
+      {previewDraft && (
+        <div className="admin-v3-modal" role="dialog" aria-modal="true" onClick={() => setPreviewDraft(null)}>
+          <div onClick={(event) => event.stopPropagation()}>
+            <button aria-label="Close preview" onClick={() => setPreviewDraft(null)} type="button"><X size={18} /></button>
+            <img alt="" src={previewDraft.previewUrl} />
+            <section>
+              <strong>{previewDraft.name}</strong>
+              <span>{previewDraft.publicUrl ?? "Local preview, not uploaded yet"}</span>
+            </section>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -512,17 +733,17 @@ function AdminLogin({ error, onLogin }: { error: string; onLogin: (formData: For
         className="admin-v2-login-card"
         onSubmit={(event) => {
           event.preventDefault();
-          onLogin(new FormData(event.currentTarget));
+          void onLogin(new FormData(event.currentTarget));
         }}
       >
         <h1>LetDove Admin Login</h1>
         <label>
           <span>Username</span>
-          <input autoComplete="username" name="username" placeholder="admin" />
+          <input autoComplete="username" name="username" />
         </label>
         <label>
           <span>Password</span>
-          <input autoComplete="current-password" name="password" placeholder="admin" type="password" />
+          <input autoComplete="current-password" name="password" type="password" />
         </label>
         {error && <p>{error}</p>}
         <button type="submit">Login</button>
@@ -547,10 +768,10 @@ function Field({
   value: string;
 }) {
   return (
-    <label className="admin-v2-field">
+    <label className="admin-v3-field">
       <span>{label}</span>
       {multiline ? (
-        <textarea onChange={(event) => onChange(event.target.value)} readOnly={readOnly} rows={4} value={value} />
+        <textarea onChange={(event) => onChange(event.target.value)} readOnly={readOnly} rows={5} value={value} />
       ) : (
         <input onChange={(event) => onChange(event.target.value)} readOnly={readOnly} type={type} value={value} />
       )}
@@ -558,24 +779,20 @@ function Field({
   );
 }
 
-function LivePreview({ item }: { item: AdminItem }) {
-  return (
-    <article className="admin-v2-preview-card">
-      <div>
-        {item.media.cover ? <img alt="" src={item.media.cover} /> : <span>No cover image</span>}
-      </div>
-      <section>
-        <code>{item.letdove_code}</code>
-        <h3>{item.title}</h3>
-        <p>{item.description}</p>
-        <div>
-          {item.tags.slice(0, 4).map((tag) => (
-            <span key={tag}>{tag}</span>
-          ))}
-        </div>
-      </section>
-    </article>
-  );
+function MediaStatusBadge({ draft }: { draft: MediaDraft }) {
+  if (draft.status === "uploaded") {
+    return <span className="admin-v3-status" data-status="uploaded"><CheckCircle2 size={13} />R2</span>;
+  }
+
+  if (draft.status === "uploading") {
+    return <span className="admin-v3-status" data-status="uploading"><Loader2 size={13} />Uploading</span>;
+  }
+
+  if (draft.status === "error") {
+    return <span className="admin-v3-status" data-status="error"><AlertCircle size={13} />Check</span>;
+  }
+
+  return <span className="admin-v3-status" data-status="local"><Eye size={13} />Preview</span>;
 }
 
 function normalizeItems(items: LetDoveItem[]) {
@@ -659,4 +876,37 @@ function splitCsv(value: string) {
     .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean);
+}
+
+function readImageDimensions(url: string) {
+  return new Promise<{ height: number; width: number }>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve({ height: image.naturalHeight, width: image.naturalWidth });
+    image.onerror = reject;
+    image.src = url;
+  });
+}
+
+function getImageName(url: string) {
+  return decodeURIComponent(url.split("/").pop() || "image");
+}
+
+function formatBytes(size: number) {
+  if (!size) {
+    return "R2 image";
+  }
+
+  if (size < 1024 * 1024) {
+    return `${Math.round(size / 1024)} KB`;
+  }
+
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function isPersistableImageUrl(value: string) {
+  return /^https?:\/\/.+/i.test(value) && !value.startsWith("data:") && !value.startsWith("blob:");
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
