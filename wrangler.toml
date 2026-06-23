@@ -8,5 +8,5 @@ bucket_name = "letdove-images"
 [vars]
 ADMIN_USER = "admin"
 ADMIN_PASS = "adminissimon"
-R2_PUBLIC_BASE_URL = "https://img.letdove.uk"
+R2_PUBLIC_BASE_URL = "https://pub-58471c54dd5a43ef9d5595d0ced0de61.r2.dev"
 # Optional: set a separate session secret with `wrangler pages secret put ADMIN_SESSION_SECRET`.
