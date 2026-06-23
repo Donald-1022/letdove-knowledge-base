@@ -23,7 +23,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000/letdove`.
+Open `http://localhost:3000/library`.
 
 Admin editor:
 
@@ -149,9 +149,9 @@ Single-file upload success response:
 {
   "environment": "production",
   "success": true,
-  "url": "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
-  "urls": ["https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg"],
-  "key": "letdove/prompt/p01_q01/image_001.jpg",
+  "url": "https://img.letdove.uk/letdove/p01_q01/image_001.jpg",
+  "urls": ["https://img.letdove.uk/letdove/p01_q01/image_001.jpg"],
+  "key": "letdove/p01_q01/image_001.jpg",
   "size": 182341
 }
 ```
@@ -200,10 +200,10 @@ Required fields for each item:
   "title": "Product Hero Prompt",
   "description": "Short searchable summary",
   "media": {
-    "cover": "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
+    "cover": "https://img.letdove.uk/letdove/p01_q01/image_001.jpg",
     "gallery": [
-      "https://img.letdove.uk/letdove/prompt/p01_q01/image_001.jpg",
-      "https://img.letdove.uk/letdove/prompt/p01_q01/image_002.jpg"
+      "https://img.letdove.uk/letdove/p01_q01/image_001.jpg",
+      "https://img.letdove.uk/letdove/p01_q01/image_002.jpg"
     ]
   },
   "category_l1": "prompt",

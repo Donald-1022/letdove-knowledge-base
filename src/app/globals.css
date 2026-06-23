@@ -217,20 +217,6 @@ a {
   outline: 0;
 }
 
-.tag-search-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 26px;
-}
-
-.tag-search-label {
-  color: var(--muted);
-  font-size: 13px;
-  margin-right: 2px;
-}
-
 .chip {
   align-items: center;
   background: var(--chip-bg);
@@ -257,7 +243,7 @@ a {
   display: flex;
   font-size: 13px;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 18px;
 }
 
 .grid-meta code {
@@ -267,8 +253,8 @@ a {
 
 .lexicon-grid {
   display: grid;
-  gap: 20px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .lexicon-card {
@@ -276,7 +262,7 @@ a {
   aspect-ratio: 4 / 5;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   display: block;
   overflow: hidden;
   position: relative;
@@ -298,7 +284,7 @@ a {
 
 .lexicon-card:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.13);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px);
 }
 
@@ -315,7 +301,7 @@ a {
 }
 
 .card-wash {
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1), transparent 32%, rgba(0, 0, 0, 0.82));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.06), transparent 36%, rgba(0, 0, 0, 0.72));
   inset: 0;
   position: absolute;
 }
@@ -340,7 +326,7 @@ a {
   display: grid;
   gap: 7px;
   left: 0;
-  padding: 18px;
+  padding: 20px;
   position: absolute;
   right: 0;
 }
@@ -362,14 +348,14 @@ a {
 
 .card-title {
   color: #fff;
-  font-size: clamp(14px, 1.3vw, 18px);
+  font-size: clamp(18px, 1.65vw, 24px);
   font-weight: 720;
   letter-spacing: 0;
   line-height: 1.12;
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .card-description {
@@ -378,8 +364,8 @@ a {
   font-size: 13px;
   line-height: 1.38;
   margin: 0;
-  max-height: 0;
-  opacity: 0;
+  max-height: 62px;
+  opacity: 0.92;
   overflow: hidden;
   transition: max-height 220ms ease, opacity 220ms ease;
   -webkit-box-orient: vertical;
@@ -387,30 +373,7 @@ a {
 }
 
 .lexicon-card:hover .card-description {
-  max-height: 74px;
   opacity: 1;
-}
-
-.card-tags {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  font-size: 12px;
-  gap: 5px;
-  max-height: 52px;
-  overflow: hidden;
-}
-
-.card-tags span {
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  color: rgba(255, 255, 255, 0.9);
-  max-width: 100%;
-  overflow: hidden;
-  padding: 3px 7px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .empty-state {
@@ -449,8 +412,11 @@ a {
 }
 
 .post-media {
+  align-items: center;
   aspect-ratio: 4 / 5;
   background: #111;
+  display: flex;
+  justify-content: center;
   min-height: 0;
   overflow: hidden;
   position: relative;
@@ -460,7 +426,7 @@ a {
   animation: image-swipe 260ms ease both;
   display: block;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   scroll-snap-align: start;
   flex: 0 0 100%;
   width: 100%;
@@ -586,9 +552,7 @@ a {
   font-weight: 720;
   line-height: 1.18;
   margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .icon-button {
@@ -676,21 +640,6 @@ a {
   margin: 0;
 }
 
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.tag-pill {
-  background: var(--panel-soft);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--muted);
-  font-size: 12px;
-  padding: 5px 8px;
-}
-
 .post-footer {
   align-items: center;
   border-top: 1px solid var(--line);
@@ -756,10 +705,13 @@ a {
 }
 
 .detail-hero-media {
+  align-items: center;
   background: #0f0f0f;
   border-radius: 12px;
   box-shadow: var(--shadow);
+  display: flex;
   height: min(78vh, 820px);
+  justify-content: center;
   min-height: 520px;
   overflow: hidden;
   position: relative;
@@ -823,6 +775,14 @@ a {
   gap: 10px;
 }
 
+.detail-meta-stack {
+  align-items: start;
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  gap: 8px;
+}
+
 .detail-description {
   color: var(--ink-soft);
   font-size: clamp(18px, 2vw, 24px);
@@ -874,6 +834,21 @@ a {
   display: inline-flex;
   font-size: 13px;
   margin: 24px clamp(16px, 3vw, 40px) 0;
+}
+
+.redirect-page {
+  align-content: center;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  min-height: 100vh;
+  padding: 24px;
+  text-align: center;
+}
+
+.redirect-page h1,
+.redirect-page p {
+  margin: 0;
 }
 
 .admin-login-shell {
@@ -2355,11 +2330,13 @@ a {
   background: #ff2442;
   border-radius: 999px;
   color: #fff;
+  font-size: 13px;
   font-weight: 900;
-  padding: 7px 12px;
+  padding: 6px 10px;
 }
 
 .admin-xhs-brand strong {
+  display: none;
   font-size: 14px;
   line-height: 1.2;
 }
@@ -2710,10 +2687,24 @@ a {
 .admin-xhs-editor {
   align-self: start;
   display: grid;
-  gap: 12px;
+  gap: 14px;
   padding: 20px;
   position: sticky;
   top: 24px;
+}
+
+.admin-xhs-editor .admin-v3-field {
+  gap: 7px;
+}
+
+.admin-xhs-editor .admin-v3-field input,
+.admin-xhs-editor .admin-v3-field select,
+.admin-xhs-editor .admin-v3-field textarea {
+  background: #fafafa;
+  border: 1px solid #dedede;
+  border-radius: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
 }
 
 .admin-xhs-json-import {
@@ -2747,9 +2738,14 @@ a {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+  white-space: nowrap;
 }
 
 .admin-xhs-editor-actions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  justify-content: center;
   min-width: 96px;
   white-space: nowrap;
 }
@@ -3128,16 +3124,6 @@ a {
 
   .card-title {
     font-size: 16px;
-  }
-
-  .card-tags {
-    gap: 4px;
-  }
-
-  .tag-chip {
-    font-size: 10px;
-    max-width: 100%;
-    padding: 4px 6px;
   }
 
   .card-taxonomy {

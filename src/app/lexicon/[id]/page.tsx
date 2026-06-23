@@ -92,13 +92,6 @@ export default async function DetailPage({ params }: DetailPageProps) {
               ))}
             </div>
 
-            <div className="tag-list" aria-label="Search tags">
-              {item.tags.map((tag) => (
-                <span className="tag-pill" key={tag}>
-                  #{tag}
-                </span>
-              ))}
-            </div>
           </div>
 
           {item.links[0] && (

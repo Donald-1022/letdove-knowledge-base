@@ -34,11 +34,10 @@ export async function onRequestPost({ request, env }) {
       return json({ environment, success: false, urls: [], error: "R2 not bound" }, 500);
     }
 
-    const category = sanitizePathSegment(upload.category || "general");
     const letdoveCode = sanitizePathSegment(upload.letdoveCode || "uncategorized");
-    const key = `letdove/${category}/${letdoveCode}/${getSafeFileName(upload.name)}`;
+    const key = `letdove/${letdoveCode}/${getSafeFileName(upload.name)}`;
 
-    const baseUrl = (env.R2_PUBLIC_BASE_URL || "https://img.letdove.uk").replace(/\/$/, "");
+    const baseUrl = getPublicBaseUrl(env);
     const publicUrl = `${baseUrl}/${encodeR2Key(key)}`;
 
     console.log("UPLOAD KEY:", key);
@@ -138,6 +137,16 @@ function getRuntimeEnvironment(request) {
   } catch {
     return "production";
   }
+}
+
+function getPublicBaseUrl(env) {
+  const configured = String(env.R2_PUBLIC_BASE_URL || "https://img.letdove.uk").replace(/\/$/, "");
+
+  if (/^https:\/\/pub-[a-z0-9]+\.r2\.dev$/i.test(configured) || configured === "https://letdove.uk") {
+    return "https://img.letdove.uk";
+  }
+
+  return configured;
 }
 
 async function isAuthorized(request, env) {

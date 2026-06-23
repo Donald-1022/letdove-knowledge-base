@@ -1,20 +1,18 @@
-import { LexiconExplorer } from "@/components/lexicon-explorer";
-import {
-  getCategoryL1Options,
-  getCategoryL2Options,
-  getLetDoveItems,
-  getSeriesOptions
-} from "@/lib/letdove";
+import Link from "next/link";
 
-export default function Home() {
-  const items = getLetDoveItems();
+export const metadata = {
+  title: "Redirecting to LetDove Library"
+};
 
+export default function HomeRedirect() {
   return (
-    <LexiconExplorer
-      categoryL1Options={getCategoryL1Options()}
-      categoryL2Options={getCategoryL2Options()}
-      items={items}
-      series={getSeriesOptions()}
-    />
+    <main className="redirect-page">
+      <meta httpEquiv="refresh" content="0; url=/library/" />
+      <h1>letdove knowledge base</h1>
+      <p>Redirecting to the library.</p>
+      <Link className="chip" href="/library/">
+        Open library
+      </Link>
+    </main>
   );
 }

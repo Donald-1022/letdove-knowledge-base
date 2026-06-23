@@ -515,6 +515,9 @@ export function AdminDashboard() {
       const result = await uploadFile(draft.file, item, item.media.gallery.length + mediaDrafts.filter((entry) => entry.status === "uploaded").length + 1, token);
 
       if (result.ok) {
+        if (draft.source === "local") {
+          URL.revokeObjectURL(draft.previewUrl);
+        }
         markDraft(draft.id, {
           key: result.key,
           progress: 100,
@@ -524,6 +527,7 @@ export function AdminDashboard() {
           uploadedSize: result.size
         });
         appendUploadedUrl(item.id, result.url);
+        setMediaDrafts((current) => current.filter((entry) => entry.id !== draft.id));
         setNotice(
           result.environment === "local"
             ? `${draft.name} uploaded to local Wrangler R2. The CDN URL may 404 until the same key is uploaded in production.`
@@ -747,7 +751,6 @@ export function AdminDashboard() {
       <aside className="admin-xhs-sidebar">
         <div className="admin-xhs-brand">
           <span>LetDove</span>
-          <strong>创作服务平台</strong>
         </div>
         <button className="admin-xhs-publish" onClick={() => {
           createNew();
@@ -947,7 +950,6 @@ function AdminLogin({ error, onLogin }: { error: string; onLogin: (formData: For
       >
         <div className="admin-xhs-login-brand">
           <span>LetDove</span>
-          <strong>创作服务平台</strong>
         </div>
         <h1>Admin Login</h1>
         <label>
@@ -1015,10 +1017,10 @@ function normalizeItems(items: LetDoveItem[]) {
 function normalizeItem(item: Partial<LetDoveItem> & { display_order?: number }) {
   const displayOrder = item.display_order ?? item.order ?? 1;
   const media = {
-    cover: item.media?.cover ?? "",
+    cover: normalizeImageUrl(item.media?.cover ?? ""),
     gallery: (item.media?.gallery ?? []).filter(
       (url): url is string => typeof url === "string" && !url.startsWith("data:") && !url.startsWith("blob:")
-    )
+    ).map(normalizeImageUrl)
   };
 
   if (typeof media.cover !== "string" || media.cover.startsWith("data:") || media.cover.startsWith("blob:")) {
@@ -1118,6 +1120,12 @@ function formatBytes(size: number) {
 
 function isPersistableImageUrl(value: string) {
   return /^https?:\/\/.+/i.test(value) && !value.startsWith("data:") && !value.startsWith("blob:");
+}
+
+function normalizeImageUrl(value: string) {
+  return value
+    .replace(/^https:\/\/pub-[a-z0-9]+\.r2\.dev\//i, "https://img.letdove.uk/")
+    .replace(/^https:\/\/letdove\.uk\/letdove\//i, "https://img.letdove.uk/letdove/");
 }
 
 function getDataStatusLabel(status: "loading" | "local-backup" | "unsaved" | "saving" | "saved" | "error") {

@@ -52,8 +52,8 @@ export default async function LetDoveDetailPage({ params }: DetailPageProps) {
   return (
     <main className="detail-hero-page">
       <header className="detail-hero-top">
-        <Link className="detail-back" href="/letdove/">
-          Back to letdove
+        <Link className="detail-back" href="/library/">
+          Back to library
         </Link>
         <ShareActions id={item.letdove_code} iconOnly showOpen={false} />
       </header>
@@ -64,11 +64,10 @@ export default async function LetDoveDetailPage({ params }: DetailPageProps) {
         <div className="detail-title-row">
           <div>
             <h1>{item.title}</h1>
-            <div className="detail-meta-line">
+            <div className="detail-meta-stack">
               <CopyableCode code={item.letdove_code} />
+              <span>{item.category_l1} / {item.category_l2}</span>
               <span>Created {item.created_at}</span>
-              <span>L1 {item.category_l1}</span>
-              <span>L2 {item.category_l2}</span>
             </div>
           </div>
         </div>
@@ -81,14 +80,6 @@ export default async function LetDoveDetailPage({ params }: DetailPageProps) {
               <h2>{card.label}</h2>
               <p>{card.body}</p>
             </section>
-          ))}
-        </div>
-
-        <div className="tag-list" aria-label="Search tags">
-          {item.tags.map((tag) => (
-            <span className="tag-pill" key={tag}>
-              #{tag}
-            </span>
           ))}
         </div>
 

@@ -57,11 +57,11 @@ const single = await postUpload({
 assert.equal(single.status, 200);
 assert.equal(single.payload.success, true);
 assert.equal(single.payload.environment, "production");
-assert.equal(single.payload.key, "letdove/prompt/p01_q01/hero.jpg");
+assert.equal(single.payload.key, "letdove/p01_q01/hero.jpg");
 assert.equal(single.payload.size, 5);
-assert.equal(single.payload.url, "https://img.letdove.uk/letdove/prompt/p01_q01/hero.jpg");
+assert.equal(single.payload.url, "https://img.letdove.uk/letdove/p01_q01/hero.jpg");
 assert.equal(single.payload.urls.length, 1);
-assert.equal(single.payload.urls[0], "https://img.letdove.uk/letdove/prompt/p01_q01/hero.jpg");
+assert.equal(single.payload.urls[0], "https://img.letdove.uk/letdove/p01_q01/hero.jpg");
 
 const getResponse = await onRequestGet({
   request: new Request("http://localhost/api/images/upload")
@@ -85,7 +85,7 @@ const multi = await postUpload({
 assert.equal(multi.status, 200);
 assert.equal(multi.payload.success, true);
 assert.equal(multi.payload.urls.length, 1);
-assert.equal(multi.payload.urls[0], "https://img.letdove.uk/letdove/design_system/s01_g02/first.png");
+assert.equal(multi.payload.urls[0], "https://img.letdove.uk/letdove/s01_g02/first.png");
 assert.equal(puts.length, 2);
 assert.deepEqual(
   puts.map((put) => put.contentType),
@@ -103,7 +103,7 @@ for (let index = 0; index < 20; index += 1) {
   assert.equal(response.status, 200);
   assert.equal(response.payload.success, true);
   assert.equal(response.payload.urls.length, 1);
-  assert.equal(response.payload.urls[0], `https://img.letdove.uk/letdove/stress/p01_q01/image-${index}.png`);
+  assert.equal(response.payload.urls[0], `https://img.letdove.uk/letdove/p01_q01/image-${index}.png`);
 }
 
 assert.equal(puts.length, 22);

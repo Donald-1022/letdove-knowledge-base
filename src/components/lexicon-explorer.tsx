@@ -3,7 +3,6 @@
 import {
   ChevronLeft,
   ChevronRight,
-  Hash,
   Images,
   Layers,
   Moon,
@@ -91,11 +90,6 @@ export function LexiconExplorer({
   const selectedIndex = selectedItem
     ? modalItems.findIndex((item) => item.id === selectedItem.id)
     : -1;
-
-  const allTags = useMemo(
-    () => Array.from(new Set(liveItems.flatMap((item) => item.tags))).sort().slice(0, 12),
-    [liveItems]
-  );
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem("letdove-theme");
@@ -212,7 +206,7 @@ export function LexiconExplorer({
           <span className="brand-kicker">LetDove Content System</span>
           <h1 className="brand-title">letdove knowledge base</h1>
           <p className="brand-copy">
-            A shared reference library built for quick lookup across L1/L2 categories, tags, and LetDove code.
+            A shared reference library built for quick lookup across L1/L2 categories and LetDove code.
           </p>
         </div>
 
@@ -246,11 +240,11 @@ export function LexiconExplorer({
 
       <section className="toolbar" aria-label="Search and filters">
         <label className="search-field">
-          <Search aria-hidden="true" />
-          <input
-            aria-label="Search title, tags, code, and description"
+            <Search aria-hidden="true" />
+            <input
+            aria-label="Search title, code, and description"
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search title, tags, code..."
+            placeholder="Search title, code..."
             type="search"
             value={query}
           />
@@ -305,23 +299,6 @@ export function LexiconExplorer({
         </label>
 
       </section>
-
-      <section className="tag-search-row" aria-label="Search tags">
-        <span className="tag-search-label">Search tags</span>
-        {allTags.map((tag) => (
-          <button
-            className="chip"
-            data-active={query.toLowerCase() === tag.toLowerCase()}
-            key={tag}
-            onClick={() => setQuery(tag)}
-            type="button"
-          >
-            <Hash aria-hidden="true" size={13} />
-            {tag}
-          </button>
-        ))}
-      </section>
-
       <div className="grid-meta">
         <span>
           Showing <code>{visibleItems.length}</code> of <code>{items.length}</code>
@@ -363,11 +340,6 @@ export function LexiconExplorer({
                   <span className="card-title">{item.title}</span>
                   <span className="card-code">{item.letdove_code}</span>
                   <span className="card-description">{item.description}</span>
-                  <span className="card-tags">
-                    {item.tags.slice(0, 3).map((tag) => (
-                      <span key={tag}>#{tag}</span>
-                    ))}
-                  </span>
                 </span>
               </button>
             );
@@ -375,7 +347,7 @@ export function LexiconExplorer({
         </section>
       ) : (
         <section className="empty-state">
-          <p>No cards match this view. Try a broader code, tag, L1, L2, or series.</p>
+          <p>No cards match this view. Try a broader code, L1, L2, or series.</p>
         </section>
       )}
 
@@ -481,13 +453,6 @@ function PostModal({ item, onClose }: PostModalProps) {
               ))}
             </div>
 
-            <div className="tag-list" aria-label="Search tags">
-              {item.tags.map((tag) => (
-                <span className="tag-pill" key={tag}>
-                  #{tag}
-                </span>
-              ))}
-            </div>
           </div>
 
           <footer className="post-footer compact-footer">

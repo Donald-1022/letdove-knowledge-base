@@ -108,9 +108,10 @@ function getRuntimeEnvironment(request) {
 
 function normalizeItemForStorage(item) {
   const gallery = Array.isArray(item?.media?.gallery)
-    ? item.media.gallery.filter(isPersistableImageUrl)
+    ? item.media.gallery.map(normalizeImageUrl).filter(isPersistableImageUrl)
     : [];
-  const cover = isPersistableImageUrl(item?.media?.cover) ? item.media.cover : gallery[0] ?? "";
+  const normalizedCover = normalizeImageUrl(item?.media?.cover);
+  const cover = isPersistableImageUrl(normalizedCover) ? normalizedCover : gallery[0] ?? "";
 
   return {
     ...item,
@@ -139,6 +140,16 @@ function buildSearchIndex(item) {
 
 function isPersistableImageUrl(value) {
   return typeof value === "string" && /^https?:\/\/.+/i.test(value) && !value.startsWith("data:") && !value.startsWith("blob:");
+}
+
+function normalizeImageUrl(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .replace(/^https:\/\/pub-[a-z0-9]+\.r2\.dev\//i, "https://img.letdove.uk/")
+    .replace(/^https:\/\/letdove\.uk\/letdove\//i, "https://img.letdove.uk/letdove/");
 }
 
 function json(payload, status = 200) {

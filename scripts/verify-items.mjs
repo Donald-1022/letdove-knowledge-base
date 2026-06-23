@@ -37,8 +37,8 @@ const items = [
     id: "ld_test",
     letdove_code: "T01_Q01",
     media: {
-      cover: "https://img.letdove.uk/letdove/prompt/t01_q01/cover.png",
-      gallery: ["https://img.letdove.uk/letdove/prompt/t01_q01/cover.png"]
+      cover: "https://img.letdove.uk/letdove/t01_q01/cover.png",
+      gallery: ["https://img.letdove.uk/letdove/t01_q01/cover.png"]
     },
     search_index: "",
     series: "Test Series",
